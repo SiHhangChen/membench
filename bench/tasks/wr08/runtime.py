@@ -23,7 +23,6 @@ from bench.tasks.wr08.domain.episode import resolve_episode_plan, resolve_scene_
 from bench.tasks.wr08.evaluation import (
     REPORT_STAGE_PROFILE_ID,
     TASK_EVALUATOR_METADATA_KEY,
-    WR08Evaluator,
     diagnostics_for_runtime,
     report_stages_for_runtime,
     success_for_runtime,
@@ -70,20 +69,7 @@ def _initialize(descriptor: Any, env: Any, observation: Mapping[str, Any]):
         objects=dict(descriptor.config.initial_state.objects),
     )
     targets = resolve_episode_targets(env, descriptor.episode_plan)
-    env.start_physical_observer()
-    evaluator = WR08Evaluator(
-        transport_order=descriptor.episode_plan.transport_order,
-        source_slot_by_item=descriptor.episode_plan.source_slot_by_item,
-        source_color_by_item=descriptor.episode_plan.source_color_by_item,
-        target_slot_by_item={
-            item: descriptor.episode_plan.target_slot_by_color[
-                descriptor.episode_plan.source_color_by_item[item]
-            ]
-            for item in descriptor.episode_plan.transport_order
-        },
-    )
-    evaluator.reset(env.evaluation_snapshot())
-    env._wr08_evaluator = evaluator
+    evaluator = env.reset_evaluation(expert_recording=False)
     return updated, {"setup": setup}, {TASK_EVALUATOR_METADATA_KEY: evaluator}, targets
 
 

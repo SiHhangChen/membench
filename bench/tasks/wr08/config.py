@@ -88,7 +88,14 @@ def load_task_config(path: str | Path = DEFAULT_TASK_CONFIG_FILE) -> TaskConfig:
             raise FileNotFoundError(f"missing WR-08 resource {name!r}: {resource}")
     _reject_unknown(
         _mapping(payload, "episode"),
-        {"max_horizon", "color_count", "item_sample_radius_m", "color_pool"},
+        {
+            "max_horizon",
+            "color_count",
+            "item_sample_radius_m",
+            "color_pool",
+            "carton_type_candidates",
+            "carton_material_candidates",
+        },
         "episode fields",
     )
     _reject_unknown(

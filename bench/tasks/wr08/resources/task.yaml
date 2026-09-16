@@ -22,10 +22,16 @@ episode:
   max_horizon: 5200
   color_count: 3
   item_sample_radius_m: 0.045
+  # Appearance randomization pools (align with WR-07).
+  # Geometry remains locked per item (boxed_food_a=milk_0, boxed_food_b=milk_1),
+  # but each carton independently samples a material profile from this list.
+  carton_type_candidates: [milk_0, milk_1]
+  carton_material_candidates: [matte, satin, glossy, foil]
 
 initial_state:
   robot_base:
-    mode: preserve_reset_pose
+    mode: reset_circle
+    radius_m: 0.05
   source_regions:
     source_left: {size: [0.34, 0.30], pos: [-1.0, -1.0], margin: 0.02, surface_z: 0.93}
     source_center: {size: [0.34, 0.30], pos: [0.0, -1.0], margin: 0.02, surface_z: 0.93}

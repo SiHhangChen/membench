@@ -3,12 +3,25 @@
 from __future__ import annotations
 
 import random
+from collections.abc import Sequence
 from math import cos, isfinite, pi, sin, sqrt
 from typing import Any
 
 from bench.tasks.wr08.domain.contracts import (
-    COLOR_NAMES, DISPLAY_NAME, ENV_NAME, EpisodePlan, ITEM_IDS, SOURCE_SLOTS,
-    TARGET_SLOTS, TASK_ID, TaskDefinition, SceneConfig,
+    CARTON_ASSET_BY_ITEM,
+    CARTON_TYPE_BY_ITEM,
+    COLOR_NAMES,
+    DISPLAY_NAME,
+    ENV_NAME,
+    EpisodePlan,
+    ITEM_IDS,
+    MILK_CARTON_MATERIALS,
+    MILK_CARTON_TYPES,
+    SOURCE_SLOTS,
+    TARGET_SLOTS,
+    TASK_ID,
+    TaskDefinition,
+    SceneConfig,
 )
 
 
@@ -31,6 +44,37 @@ def validate_color(value: Any) -> str:
     if color not in COLOR_NAMES:
         raise ValueError(f"invalid WR-08 color: {color!r}")
     return color
+
+
+def validate_carton_type(value: Any) -> str:
+    carton_type = str(value)
+    if carton_type not in MILK_CARTON_TYPES:
+        raise ValueError(f"invalid WR-08 milk-carton type: {carton_type!r}")
+    return carton_type
+
+
+def validate_carton_material(value: Any) -> str:
+    material = str(value)
+    if material not in MILK_CARTON_MATERIALS:
+        raise ValueError(f"invalid WR-08 milk-carton material: {material!r}")
+    return material
+
+
+def _candidate_pool(
+    value: Any,
+    *,
+    allowed: tuple[str, ...],
+    label: str,
+) -> tuple[str, ...]:
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+        raise ValueError(f"WR-08 {label} must be a non-empty sequence")
+    candidates = tuple(str(item) for item in value)
+    if not candidates or len(set(candidates)) != len(candidates):
+        raise ValueError(f"WR-08 {label} must be non-empty and unique")
+    unknown = sorted(set(candidates) - set(allowed))
+    if unknown:
+        raise ValueError(f"unknown WR-08 {label}: " + ", ".join(unknown))
+    return candidates
 
 
 def resolve_task_definition(**values: Any) -> TaskDefinition:
@@ -109,6 +153,20 @@ def resolve_episode_plan(*, seed: int, **values: Any) -> EpisodePlan:
     target_offsets = {item: _sample_disk(rng, item_radius) for item in ITEM_IDS}
     source_yaws = {item: rng.uniform(-pi, pi) for item in ITEM_IDS}
     target_yaws = {item: rng.uniform(-pi, pi) for item in ITEM_IDS}
+
+    # Per-item appearance randomization (independent for each carton).
+    # Geometry is still locked by CARTON_TYPE_BY_ITEM for each logical item id.
+    carton_type_by_item = {
+        item: CARTON_TYPE_BY_ITEM[item] for item in ITEM_IDS
+    }
+    carton_asset_by_item = {
+        item: CARTON_ASSET_BY_ITEM[item] for item in ITEM_IDS
+    }
+    # Draw material choices from the candidate pool after all geometry decisions.
+    carton_material_by_item = {
+        item: rng.choice(carton_materials) for item in ITEM_IDS
+    }
+
     return EpisodePlan(
         seed=episode_seed,
         source_plate_color_by_slot=source_by_slot,
@@ -121,6 +179,11 @@ def resolve_episode_plan(*, seed: int, **values: Any) -> EpisodePlan:
         target_item_offset_xy_by_item=target_offsets,
         target_item_yaw_by_item=target_yaws,
         item_sample_radius_m=item_radius,
+        carton_type_by_item=carton_type_by_item,
+        carton_asset_by_item=carton_asset_by_item,
+        carton_material_by_item=carton_material_by_item,
+        carton_type_candidates=carton_types,
+        carton_material_candidates=carton_materials,
         transport_order=tuple(order),
         max_horizon=horizon,
     )

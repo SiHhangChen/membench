@@ -21,6 +21,55 @@ CARTON_ASSET_BY_ITEM = {
     "boxed_food_a": "objaverse/milk/milk_0/model.xml",
     "boxed_food_b": "objaverse/milk/milk_1/model.xml",
 }
+
+# Only assets that load from repository-relative dependencies are included in
+# the randomized carton pool. The AIGen milk models currently refer to
+# a machine-local absolute texture path and are therefore intentionally kept
+# out of the benchmark pool until those dependencies are repaired.
+MILK_CARTON_ASSET_BY_TYPE = {
+    "milk_0": "objaverse/milk/milk_0/model.xml",
+    "milk_1": "objaverse/milk/milk_1/model.xml",
+    "milk_3": "objaverse/milk/milk_3/model.xml",
+    "milk_4": "objaverse/milk/milk_4/model.xml",
+    "milk_5": "objaverse/milk/milk_5/model.xml",
+    "milk_7": "objaverse/milk/milk_7/model.xml",
+    "milk_9": "objaverse/milk/milk_9/model.xml",
+    "milk_10": "objaverse/milk/milk_10/model.xml",
+}
+
+# Appearance randomization keeps each carton's mesh and collision model fixed
+# (boxed_food_a always uses milk_0 geometry, boxed_food_b uses milk_1).
+# Each profile recolors the green region of the texture and applies a
+# matching optical finish after MuJoCo compilation. Both cartons may receive
+# independent material assignments.
+MILK_CARTON_MATERIAL_PROFILES = {
+    "matte": {
+        "texture_rgb": (156, 92, 38),
+        "specular": 0.08,
+        "shininess": 0.08,
+        "reflectance": 0.0,
+    },
+    "satin": {
+        "texture_rgb": (40, 160, 82),
+        "specular": 0.28,
+        "shininess": 0.25,
+        "reflectance": 0.02,
+    },
+    "glossy": {
+        "texture_rgb": (38, 105, 210),
+        "specular": 0.62,
+        "shininess": 0.65,
+        "reflectance": 0.08,
+    },
+    "foil": {
+        "texture_rgb": (145, 160, 175),
+        "specular": 0.88,
+        "shininess": 0.92,
+        "reflectance": 0.18,
+    },
+}
+MILK_CARTON_MATERIALS = tuple(MILK_CARTON_MATERIAL_PROFILES)
+
 SOURCE_SLOTS = ("source_left", "source_center", "source_right")
 TARGET_SLOTS = ("target_left", "target_center", "target_right")
 # Compatibility aliases for older tooling; the active semantics use the
@@ -121,6 +170,11 @@ class EpisodePlan:
     target_item_offset_xy_by_item: Mapping[str, tuple[float, float]]
     target_item_yaw_by_item: Mapping[str, float]
     item_sample_radius_m: float
+    carton_type_by_item: Mapping[str, str]
+    carton_asset_by_item: Mapping[str, str]
+    carton_material_by_item: Mapping[str, str]
+    carton_type_candidates: tuple[str, ...]
+    carton_material_candidates: tuple[str, ...]
     transport_order: tuple[str, ...]
     max_horizon: int
 
@@ -147,10 +201,35 @@ class RunContext:
     extra_metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
+# For WR-08 the geometry is fixed per logical item id while appearance is randomized.
+# boxed_food_a is always bound to the milk_0 model, boxed_food_b to milk_1.
+CARTON_TYPE_BY_ITEM = {
+    "boxed_food_a": "milk_0",
+    "boxed_food_b": "milk_1",
+}
+
+MILK_CARTON_TYPES = tuple(CARTON_TYPE_BY_ITEM.values())
+
+
+class RobotBaseMode(str, Enum):
+    PRESERVE_RESET_POSE = "preserve_reset_pose"
+    EXPLICIT_POSE = "explicit_pose"
+    RESET_CIRCLE = "reset_circle"
+
+
+@dataclass(frozen=True)
+class RobotBaseConfig:
+    mode: RobotBaseMode
+    xy: tuple[float, float] | None = None
+    yaw: float | None = None
+    radius_m: float | None = None
+
+
 __all__ = [
-    "ActionConfig", "CARTON_ASSET_BY_ITEM", "COLOR_NAMES", "COLOR_RGBA", "DISPLAY_NAME", "ENV_NAME",
-    "COUNTER_ZONES", "HOME_REGIONS", "EpisodePlan", "EpisodeTargets", "ITEM_IDS", "ITEM_LABELS",
-    "PLATE_SIDES",
+    "ActionConfig", "CARTON_ASSET_BY_ITEM", "CARTON_TYPE_BY_ITEM", "COLOR_NAMES", "COLOR_RGBA",
+    "DISPLAY_NAME", "ENV_NAME", "COUNTER_ZONES", "HOME_REGIONS", "EpisodePlan", "EpisodeTargets",
+    "ITEM_IDS", "ITEM_LABELS", "MILK_CARTON_ASSET_BY_TYPE", "MILK_CARTON_MATERIALS",
+    "MILK_CARTON_MATERIAL_PROFILES", "MILK_CARTON_TYPES", "PLATE_SIDES",
     "InitialStateConfig", "RobotBaseConfig", "RobotBaseMode", "RunContext",
     "SOURCE_SLOTS", "SceneConfig", "TARGET_SLOTS", "USE_REGIONS", "TASK_ID", "TASK_REVISION",
     "TaskConfig", "TaskDefinition",

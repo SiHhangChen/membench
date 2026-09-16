@@ -4,8 +4,9 @@ WR-08 v3 moves two different milk carton models from the coffee-machine-side
 sugar plates to matching colored sugar plates on the opposite counter. Each episode samples
 three distinct plate colors from a fixed 20-color pool, randomizes the source
 left/center/right arrangement, and applies a reproducible permutation to the
-target arrangement. The two cartons occupy distinct source plates and are
-transported in a seed-deterministic order.
+target arrangement. The two cartons occupy distinct source plates. Expert
+recordings use a seed-deterministic transport order; policy evaluation accepts
+either order and tracks each carton separately.
 
 `boxed_food_a` is bound to the Objaverse `milk_0` model and `boxed_food_b` is
 bound to `milk_1`. These are distinct visual and collision assets; their own
@@ -49,21 +50,49 @@ eight nodes per carton (source navigation, pick, stow, remember, target
 navigation, place, verify, and empty-arm return). These are not 17 physical
 actions or public evaluation milestones.
 Initial plate assignments are physically checked at reset. Pickup events require
-physical grasp evidence as each distinct carton leaves its source region; merely
-sliding or falling off the source plate does not latch a color. A held carton passing
-over a target plate is not a placement. Both cartons must be released at their
-matching targets, with no protocol violation, for the episode to succeed.
+physical grasp evidence; merely sliding or falling off the source plate does not
+latch a color. Recording retains its ordered pick/color-memory/match checks,
+geometric placement checks, and post-placement verification/arm-return actions.
 
-The ordered evaluator and action-only replay use the same physical events. The
-public profile is `WR-08/report-v2`, in chronological order:
+Policy evaluation applies WR-07's physical checks independently to both cartons:
+
+- Pickup requires a closed gripper, a verified hold, and a lift of at least 2 cm
+  from that carton's evaluation-start position. Lateral motion alone is insufficient.
+- Putdown requires release from the gripper and actual contact with a source tray,
+  target tray, or counter. Missing contact evidence cannot establish release or support.
+- Matching requires unique contact with the target tray selected by the carton's
+  original source color. The policy check has no 16 cm XY threshold, bottom-height
+  filter, upright check, or required retreat distance.
+- A placement must follow pickup and persist for two consecutive control steps
+  (0.1 s at 20 Hz). Duplicate reads and skipped steps cannot accumulate confirmation.
+- Either carton placed on a wrong target ends the evaluation immediately after
+  confirmation with `wrong_target_placement`. Source/counter putdowns are not wrong
+  target attempts. The first correct carton does not end the episode.
+- Success requires both pickup/placement histories and both cartons currently
+  released on their correct targets. Success or wrong-target failure freezes the
+  verdict and sets `stop_execution`; the runtime rejects further actions until reset,
+  including when `stop_on_success=False`.
+
+Canonical runtimes start in policy mode. Explicit expert attachment switches the
+same evaluator to recording mode and starts the legacy physical-event observer.
+Color memory is an expert recording check; policy matching uses the fixed episode
+color assignments directly. No expert callbacks are needed for policy evaluation.
+
+The public profile is `WR-08/report-v3`:
 
 1. `one_item_picked`
-2. `one_item_color_latched`
+2. `one_item_placed`
 3. `one_item_matched`
 4. `two_items_picked`
-5. `two_items_color_latched`
+5. `two_items_placed`
 6. `two_items_matched`
 7. `success`
+
+These milestones count distinct cartons. The public funnel gates later milestones
+on earlier ones; diagnostics also retain each carton's actual pickup/placement
+steps, including interleaved transports. Historical placement milestones remain
+recorded if a carton is disturbed, while final success still checks both current
+placements. Expert reports map their verified placements to the placement milestones.
 
 ## Validation
 
@@ -72,6 +101,7 @@ Run the simulator-free contract, negative-case, and reporting tests:
 ```bash
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q \
   tests/test_wr08_task.py tests/test_wr08_evaluation.py tests/test_wr08_manipulation.py \
+  tests/test_wr08_policy_evaluation.py tests/test_wr08_physical_evaluation.py \
   tests/evaluation/test_report_stages.py
 ```
 
@@ -93,7 +123,12 @@ PYTHONPATH=. MUJOCO_GL=egl PYOPENGL_PLATFORM=egl \
 ```
 
 Inspect both the recording manifest and replay summary: process exit code alone
-does not establish task success. Validate seed 0 and its three camera videos
+does not establish task success. Policy replay now stops at its final verdict;
+the remaining expert verification/arm-return actions remain in the native recording.
+The campaign validator accepts an exact recorded-action prefix only when the
+replay provides a verified successful task stop and all current public milestones.
+Historical `report-v2` results retain their old meaning and must be replayed to
+validate the new policy criteria. Validate seed 0 and its three camera videos
 first, expand to seeds 0–9, and then to 50 distinct seeds before promoting a
 batch. Keep failed attempts, configuration hashes, and the tested source revision
 with the validation report. Recordings made with the old single-asset revision
@@ -112,7 +147,7 @@ action, diagnostic and public stage. The native recordings still retain all
 three 20 Hz RGB videos.
 
 `scripts/analysis/validate_wr08_campaign.py` combines exact seed coverage, native
-HDF5/video decoding, full action replay and the seven public stages. When mixing
+HDF5/video decoding, verified action replay and the seven public stages. When mixing
 original and repaired expert batches, supply `--recording-provenance` so original
 recordings retain their historical source archives. Do not count diagnostic
 prefix probes or failed attempts as accepted recordings.

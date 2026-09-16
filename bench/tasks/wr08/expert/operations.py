@@ -11,6 +11,7 @@ from bench.tasks.wr08.execution.navigation import build_navigation_assembly
 
 
 def build_operation_handlers(descriptor: Any, env: Any, observation: dict[str, Any]) -> dict[str, Any]:
+    env.reset_evaluation(expert_recording=True)
     navigation = build_navigation_assembly(
         env,
         observation,

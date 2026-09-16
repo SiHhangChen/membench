@@ -185,6 +185,9 @@ class WR08MatchMilkCartonsToColoredSugarPlates(Kitchen):
         self._semantic_state = SemanticState()
         self._physical_observer: WR08PhysicalObserver | None = None
         self._wr08_evaluator: WR08Evaluator | None = None
+        # Raw environments retain recording checks. Canonical policy runtimes
+        # select physical evaluation explicitly before executing any actions.
+        self.require_expert_protocol = True
         self._physical_event_diagnostics: dict[str, Any] = {}
         self._evaluation_initial_item_positions: dict[str, np.ndarray] = {}
         self._source_plate_centers: dict[str, np.ndarray] = {}
@@ -462,6 +465,7 @@ class WR08MatchMilkCartonsToColoredSugarPlates(Kitchen):
         )
 
     def detect_target_slot(self, item: str) -> str | None:
+        """Expert recording's geometric detector; policy evaluation uses contact."""
         pos = self._obj_pos(str(item))
         distances = {
             slot: float(
@@ -495,6 +499,7 @@ class WR08MatchMilkCartonsToColoredSugarPlates(Kitchen):
         return abs(bottom_z - float(self._target_plate_centers[resolved][2])) <= 0.06
 
     def physical_state(self) -> PhysicalState:
+        """Legacy physical state consumed by the expert recording observer."""
         return PhysicalState(
             item_in_source={
                 item: self.detect_source_slot(item) is not None for item in ITEM_IDS
@@ -508,7 +513,29 @@ class WR08MatchMilkCartonsToColoredSugarPlates(Kitchen):
     def latch_source_color_memory(self, item: str) -> bool:
         return latch_source_color_memory(self._semantic_state, str(item))
 
+    def reset_evaluation(self, *, expert_recording: bool = False) -> WR08Evaluator:
+        """Select policy or recording evaluation independently of the data split."""
+        self.require_expert_protocol = bool(expert_recording)
+        self._evaluation_initial_item_positions = {
+            item: self._obj_pos(item).copy() for item in ITEM_IDS
+        }
+        if self.require_expert_protocol:
+            self.start_physical_observer()
+        else:
+            self._physical_observer = None
+            self._physical_event_diagnostics = {}
+        if self._wr08_evaluator is None:
+            self._wr08_evaluator = WR08Evaluator(
+                transport_order=self._transport_order,
+                source_slot_by_item=self.source_slot_by_item,
+                source_color_by_item=self.source_color_by_item,
+                target_slot_by_item={item: self.target_slot_for_item(item) for item in ITEM_IDS},
+            )
+        self._wr08_evaluator.reset(self.evaluation_snapshot())
+        return self._wr08_evaluator
+
     def start_physical_observer(self) -> None:
+        """Start recording's pick/color-memory/placement event reconstruction."""
         self._evaluation_initial_item_positions = {
             item: self._obj_pos(item).copy() for item in ITEM_IDS
         }
@@ -524,6 +551,8 @@ class WR08MatchMilkCartonsToColoredSugarPlates(Kitchen):
         self._physical_event_diagnostics = dict(update.diagnostics)
 
     def _update_task_state(self) -> None:
+        if not self.require_expert_protocol:
+            return
         observer = self._physical_observer
         if observer is None:
             return
@@ -557,7 +586,120 @@ class WR08MatchMilkCartonsToColoredSugarPlates(Kitchen):
             },
         )
 
+    def _policy_grasp_evidence(self, item: str) -> dict[str, Any]:
+        """Use the same closed-gripper, contact, and 2 cm lift check as WR-07."""
+        try:
+            from bench.execution.manipulation.object_interactions import get_object_hold_status
+
+            qpos = np.asarray(
+                self.robots[0].get_gripper_joint_positions("right"), dtype=float
+            ).reshape(-1)
+            if qpos.size < 2 or not np.all(np.isfinite(qpos[:2])):
+                raise ValueError("invalid gripper joint positions")
+            hold = get_object_hold_status(self, item, max_end_effector_distance=0.18)
+            baseline = self._evaluation_initial_item_positions.get(item)
+            current = self._obj_pos(item)
+            lift = None if baseline is None else float(current[2] - baseline[2])
+            closed = bool(np.max(np.abs(qpos[:2])) <= 0.035)
+            contact_known = "contact" in hold["contact_and_grasp"]
+            released = bool(
+                hold["checks"]["finite_pose"]
+                and contact_known
+                and not hold["checks"]["grasp_or_contact"]
+            )
+            return {
+                "picked_up": bool(closed and hold["held"] and lift is not None and lift >= 0.02),
+                "released": released,
+                "gripper_closed": closed,
+                "lift_m": lift,
+                "hold": hold,
+            }
+        except Exception as exc:
+            return {
+                "picked_up": False,
+                "released": False,
+                "reason": f"{type(exc).__name__}: {exc}",
+            }
+
+    def _policy_support_evidence(self, item: str) -> dict[str, Any]:
+        """Read actual source/target tray and counter contacts, as in WR-07."""
+        plate_names = [self.source_plate_name(slot) for slot in SOURCE_SLOTS]
+        plate_names += [self.target_plate_name(slot) for slot in TARGET_SLOTS]
+        try:
+            support = {
+                name: bool(self.check_contact(self.objects[item], self.objects[name]))
+                for name in plate_names
+            }
+            on_counter = bool(OU.check_obj_any_counter_contact(self, item))
+            return {
+                "supported": bool(any(support.values()) or on_counter),
+                "plate_support": support,
+                "counter_contact": on_counter,
+            }
+        except Exception as exc:
+            return {
+                "supported": False,
+                "plate_support": {name: False for name in plate_names},
+                "counter_contact": False,
+                "reason": f"{type(exc).__name__}: {exc}",
+            }
+
+    def _policy_evaluation_snapshot(self) -> WR08EvaluationSnapshot:
+        grasp = {item: self._policy_grasp_evidence(item) for item in ITEM_IDS}
+        support = {item: self._policy_support_evidence(item) for item in ITEM_IDS}
+        placed = {
+            item: bool(grasp[item]["released"] and support[item]["supported"])
+            for item in ITEM_IDS
+        }
+        observed_targets = {}
+        for item in ITEM_IDS:
+            contacts = [
+                slot for slot in TARGET_SLOTS
+                if support[item]["plate_support"][self.target_plate_name(slot)]
+            ]
+            # Multiple simultaneous target contacts do not identify a unique
+            # destination. Neither XY position nor the expert's aim point is used.
+            observed_targets[item] = contacts[0] if len(contacts) == 1 else None
+        target_slots = {item: self.target_slot_for_item(item) for item in ITEM_IDS}
+        collision_state = self._object_collision_diagnostics()
+        return WR08EvaluationSnapshot(
+            step_id=int(getattr(self, "timestep", 0)),
+            transport_order=self._transport_order,
+            source_slot_by_item=self.source_slot_by_item,
+            source_color_by_item=self.source_color_by_item,
+            target_slot_by_item=target_slots,
+            item_picked_by_item={item: bool(grasp[item]["picked_up"]) for item in ITEM_IDS},
+            item_placed_by_item=placed,
+            item_matched_by_item={
+                item: bool(placed[item] and observed_targets[item] == target_slots[item])
+                for item in ITEM_IDS
+            },
+            released_by_item={item: bool(grasp[item]["released"]) for item in ITEM_IDS},
+            target_slot_attempted_by_item={
+                item: slot for item, slot in observed_targets.items()
+                if placed[item] and slot is not None
+            },
+            details={
+                "source_plate_color_by_slot": dict(self.source_plate_color_by_slot),
+                "target_plate_color_by_slot": dict(self.target_plate_color_by_slot),
+                "observed_target_slot_by_item": observed_targets,
+                "current_item_positions": {item: self._obj_pos(item).tolist() for item in ITEM_IDS},
+                "physical": {
+                    "grasp_by_item": grasp,
+                    "support_by_item": support,
+                    "object_collisions_enabled": all(
+                        entry["enabled"] for entries in collision_state.values() for entry in entries
+                    ),
+                    "object_collision_geoms": collision_state,
+                },
+                "collision_policy": "all_object_collisions_enabled",
+                "execution_mode": "action_only_physics",
+            },
+        )
+
     def evaluation_snapshot(self) -> WR08EvaluationSnapshot:
+        if not self.require_expert_protocol:
+            return self._policy_evaluation_snapshot()
         self._update_task_state()
         state = self._semantic_state
         target_slots = {item: self.target_slot_for_item(item) for item in ITEM_IDS}
@@ -586,6 +728,7 @@ class WR08MatchMilkCartonsToColoredSugarPlates(Kitchen):
             released_by_item=physical.released,
             protocol_violation=state.protocol_violation,
             domain_success=report.success,
+            require_expert_protocol=True,
             details={
                 **report.checks(),
                 "step_id": int(getattr(self, "timestep", 0)),
@@ -693,7 +836,7 @@ class WR08MatchMilkCartonsToColoredSugarPlates(Kitchen):
         return quat_wxyz[[1, 2, 3, 0]]
 
     def _item_physical_grasp_evidence(self, item_id: str) -> dict[str, Any]:
-        """Return read-only evidence that a closed gripper moved the carton."""
+        """Recording's legacy grasp check; policies use ``_policy_grasp_evidence``."""
 
         try:
             from bench.execution.manipulation.object_interactions import (
