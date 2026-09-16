@@ -1,6 +1,6 @@
 {
   "config_kind": "station",
-  "schema_version": 1,
+  "schema_version": 2,
   "task": "WA-05",
   "env_name": "WA05FillOneCupAndMatchTemperatureButton",
   "layout_id": 15,
@@ -20,52 +20,37 @@
       ]
     },
     "cup_pick_station": {
-      "samples": [
-        {
-          "station_id": "cup_pick_station",
-          "sample_index": 0,
-          "base_xy": [1.3789267853889002, -3.7609959163360895],
-          "base_yaw": 0.000009949271771056808,
-          "torso_height": 0.19820560131301382,
-          "record_source": "outputs/wa05_cup_pick_station_calibration.json"
-        }
-      ]
-    },
-    "cup_A_pick_station": {
-      "samples": [
-        {
-          "station_id": "cup_A_pick_station",
-          "sample_index": 0,
-          "base_xy": [1.3789267853889002, -3.7609959163360895],
-          "base_yaw": 0.000009949271771056808,
-          "torso_height": 0.19820560131301382,
-          "record_source": "shared_cup_pick_station_alias"
-        }
-      ]
+      "circle": {
+        "center_xy": [1.3789267853889002, -3.7609959163360895],
+        "radius_m": 0.05,
+        "base_yaw": 0.000009949271771056808,
+        "yaw_half_range_rad": 0.0,
+        "torso_height": 0.19820560131301382,
+        "record_source": "wa05_cup_pick_5cm_radius"
+      },
+      "samples": []
     },
     "sink_fill_station": {
-      "samples": [
-        {
-          "station_id": "sink_fill_station",
-          "sample_index": 0,
-          "base_xy": [1.593, -3.055],
-          "base_yaw": -0.038,
-          "torso_height": 0.01,
-          "record_source": "manual_path_sample_8"
-        }
-      ]
+      "circle": {
+        "center_xy": [1.593, -3.055],
+        "radius_m": 0.05,
+        "base_yaw": -0.038,
+        "yaw_half_range_rad": 0.0,
+        "torso_height": 0.01,
+        "record_source": "wa05_sink_fill_5cm_radius"
+      },
+      "samples": []
     },
     "service_area_station": {
-      "samples": [
-        {
-          "station_id": "service_area_station",
-          "sample_index": 0,
-          "base_xy": [1.476, -2.242],
-          "base_yaw": -0.038,
-          "torso_height": 0.01,
-          "record_source": "manual_path_sample_10"
-        }
-      ]
+      "circle": {
+        "center_xy": [1.476, -2.242],
+        "radius_m": 0.05,
+        "base_yaw": -0.038,
+        "yaw_half_range_rad": 0.0,
+        "torso_height": 0.01,
+        "record_source": "wa05_service_area_5cm_radius"
+      },
+      "samples": []
     }
   }
 }

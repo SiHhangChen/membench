@@ -34,6 +34,7 @@ def build_stage_handlers(
     controller: Any,
     *,
     handler_settings: Mapping[str, Any] | None = None,
+    sink_exit_target_provider: Callable[[], Any] | None = None,
 ) -> dict[str, Callable[..., dict[str, Any]]]:
     """Map workflow operation names to physical execution and verified events."""
 
@@ -129,11 +130,36 @@ def build_stage_handlers(
         )
 
     def lift_after_sink_exit(target: str, **kwargs: Any) -> dict[str, Any]:
-        return lift_held_cup_after_sink_exit(
+        values = dict(kwargs)
+        waypoint_xy = None
+        if sink_exit_target_provider is not None and bool(
+            controller.runtime_config.execute
+        ):
+            target_pose = sink_exit_target_provider()
+            waypoint_xy = np.asarray(target_pose.position[:2], dtype=float)
+            env = _refresh(controller)
+            base_world = np.asarray(controller.obs["robot0_base_pos"], dtype=float)
+            target_world = base_world.copy()
+            target_world[:2] = waypoint_xy
+            local_delta = (
+                _counter_local_position(env, target_world)
+                - _counter_local_position(env, base_world)
+            )
+            if not np.all(np.isfinite(local_delta)) or local_delta[0] >= -1e-6:
+                return {
+                    "primitive": "lift_held_cup_after_sink_exit",
+                    "pass": False,
+                    "reason": "sampled_service_target_not_beyond_sink_exit",
+                }
+            values["route_local_y_per_x"] = float(local_delta[1] / local_delta[0])
+        result = lift_held_cup_after_sink_exit(
             controller,
             cup_id=str(target),
-            **kwargs,
+            **values,
         )
+        if waypoint_xy is not None:
+            result["sampled_service_target_xy"] = waypoint_xy.tolist()
+        return result
 
     def record_staging(target: str, **kwargs: Any) -> dict[str, Any]:
         cup_id = str(target)

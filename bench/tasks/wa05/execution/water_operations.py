@@ -257,13 +257,12 @@ def place_cup_on_service_slot(
     values = dict(kwargs)
     target_tolerance = float(values.pop("service_target_xy_tolerance", 0.08))
     release_distance = float(values.pop("release_distance", 0.12))
-    require_pre_release_check = bool(values.pop("require_pre_release_check", True))
-    pre_release_min_height = float(
-        values.pop("pre_release_min_height_from_slot", 0.0)
-    )
-    pre_release_max_height = float(
-        values.pop("pre_release_max_height_from_slot", 0.10)
-    )
+    # Legacy releases exposed a physical gate before opening the gripper. Keep
+    # accepting those keys in old configs, but verify the settled cup only in
+    # the following record_verified_staging stage, as WA-01 does.
+    values.pop("require_pre_release_check", None)
+    values.pop("pre_release_min_height_from_slot", None)
+    values.pop("pre_release_max_height_from_slot", None)
     separation_distance = float(
         values.pop("release_separation_assist_distance", 0.0)
     )
@@ -302,59 +301,11 @@ def place_cup_on_service_slot(
     env._wa05_release_separation_distance = float(separation_distance)
     env._wa05_release_separation_trace = trace
 
-    def pre_release_check() -> dict[str, Any]:
-        controller.refresh_obs()
-        cup_position = np.asarray(env.object_position(cup_id), dtype=float).reshape(3)
-        xy_error = float(np.linalg.norm(cup_position[:2] - target[:2]))
-        height_from_slot = float(cup_position[2] - target[2])
-        cup_rotation = np.asarray(
-            env.sim.data.body_xmat[env.obj_body_id[cup_id]], dtype=float
-        ).reshape(3, 3)
-        upright_z_axis = float(cup_rotation[2, 2])
-        upright_threshold = float(
-            np.cos(np.deg2rad(float(env.cup_upright_threshold_deg)))
-        )
-        try:
-            from robocasa.utils import object_utils as OU
-
-            counter_contact = bool(
-                OU.check_obj_fixture_contact(env, cup_id, env.counter)
-            )
-        except Exception:
-            counter_contact = False
-        checks = {
-            "cup_xy_at_service_slot": bool(xy_error <= target_tolerance),
-            "cup_center_inside_service_region": bool(
-                env.cup_is_in_service_region(cup_id, slot)
-            ),
-            "cup_near_counter_height": bool(
-                pre_release_min_height <= height_from_slot <= pre_release_max_height
-            ),
-            "cup_upright": bool(upright_z_axis >= upright_threshold),
-        }
-        return {
-            "pass": bool(all(checks.values())),
-            "reason": (
-                None if all(checks.values()) else "physical_pre_release_pose_not_verified"
-            ),
-            "checks": checks,
-            "cup_position_world": cup_position.astype(float).tolist(),
-            "slot_position_world": target.astype(float).tolist(),
-            "slot_xy_error_m": xy_error,
-            "height_from_slot_m": height_from_slot,
-            "min_height_from_slot_m": pre_release_min_height,
-            "max_height_from_slot_m": pre_release_max_height,
-            "upright_z_axis": upright_z_axis,
-            "upright_threshold": upright_threshold,
-            "counter_contact": counter_contact,
-        }
-
     try:
         result = controller.place_at_world_pose(
             cup_id,
             target_name=f"{cup_id}_{slot}_service_slot",
             target_pos_world=target.tolist(),
-            pre_release_check=(pre_release_check if require_pre_release_check else None),
             **values,
         )
     finally:

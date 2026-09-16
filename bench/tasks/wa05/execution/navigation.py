@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+import json
+import zlib
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -17,8 +20,13 @@ from bench.execution.navigation import (
     station_specs_from_candidates,
 )
 from bench.execution.navigation.base_motion import qpos_for_controller, step_base_and_hold_arm
+from bench.execution.navigation.contracts import Pose
 from bench.execution.navigation.env_adapter import fixture_xy, object_xy, safe_name
+from bench.execution.navigation.manual_base_path import ManualBasePathSample
+from bench.execution.navigation.station_poses import quat_xyzw_to_yaw, yaw_to_quat_xyzw
 from bench.execution.planning import NavigationConfig
+from bench.execution.planning.nav_algo import normalize_angle
+from bench.execution.sampling.circle_sampling import sample_uniform_yaw
 from bench.execution.sampling.rng import SeedStream
 from bench.execution.sampling.station_sampler import SimpleStationSampler
 from bench.tasks.wa05.domain.contracts import CUP_IDS, SERVICE_SLOTS
@@ -29,6 +37,212 @@ CUP_A_PICK_STATION = "cup_A_pick_station"
 SINK_FILL_STATION = "sink_fill_station"
 SERVICE_AREA_STATION = "service_area_station"
 WATER_BUTTON_STATION = "water_button_station"
+
+
+@dataclass
+class EpisodeStationPoseSampler(StationPoseSampler):
+    """Sample each work station and route waypoint once per episode."""
+
+    waypoint_station_ids: dict[int, str] = field(default_factory=dict)
+    route_poses: dict[int, Pose] = field(default_factory=dict)
+    route_summaries: dict[int, dict[str, Any]] = field(default_factory=dict)
+    _cached_poses: dict[str, tuple[Pose, dict[str, Any]]] = field(
+        default_factory=dict,
+        init=False,
+    )
+
+    def sample(self, station_name: str, *, purpose: str | None = None) -> Pose:
+        station_id = self.station_id(station_name, purpose=purpose)
+        if station_id not in self._cached_poses:
+            pose = super().sample(station_name, purpose=purpose)
+            summary = dict(self.last_summary(station_name) or {})
+            summary["station_pose_selection"] = {
+                **dict(summary.get("station_pose_selection") or {}),
+                "episode_stable": True,
+            }
+            self._cached_poses[station_id] = pose, summary
+        pose, summary = self._cached_poses[station_id]
+        self._summary_by_station[station_name] = {
+            **summary, "station_name": station_name, "purpose": purpose,
+        }
+        return pose
+
+    def reset_choices(self) -> None:
+        super().reset_choices()
+        self._cached_poses.clear()
+        self.route_poses.clear()
+        self.route_summaries.clear()
+
+
+def build_episode_station_sampler(
+    config: NavigationConfig,
+    *,
+    seed: int,
+    base_xy_provider: Any | None = None,
+) -> EpisodeStationPoseSampler:
+    sampler = EpisodeStationPoseSampler.from_file(
+        config.station_base_pose_file,
+        config=config,
+        seed=int(seed),
+        base_xy_provider=base_xy_provider,
+        station_aliases=station_aliases(),
+    )
+    if config.manual_base_path_enabled and config.manual_base_path_file is not None:
+        path = json.loads(config.manual_base_path_file.read_text(encoding="utf-8"))
+        samples = sorted(path.get("samples", ()), key=lambda item: int(item["index"]))
+        for item in samples:
+            if item.get("active") is False:
+                continue
+            index = int(item["index"])
+            if item.get("station_id") is not None:
+                sampler.waypoint_station_ids[index] = str(item["station_id"])
+            elif isinstance(item.get("circle"), dict):
+                station_id = f"path_waypoint_{index}"
+                sampler.payload.setdefault("stations", {})[station_id] = {
+                    "circle": dict(item["circle"]), "samples": [],
+                }
+                sampler.waypoint_station_ids[index] = station_id
+        for item in samples:
+            if item.get("active") is False:
+                continue
+            index = int(item["index"])
+            turn = item.get("relative_turn")
+            if isinstance(turn, Mapping):
+                _add_relative_turn_sample(sampler, index=index, turn=turn)
+                continue
+            station_id = sampler.waypoint_station_ids.get(index)
+            if station_id is None:
+                continue
+            pose = sampler.sample(station_id)
+            inherited_from = item.get("inherit_yaw_from")
+            if inherited_from is not None:
+                source = sampler.route_poses[int(inherited_from)]
+                pose = _set_station_route_yaw(
+                    sampler,
+                    station_id=station_id,
+                    pose=pose,
+                    yaw=quat_xyzw_to_yaw(source.quaternion),
+                    inherited_from=int(inherited_from),
+                )
+            sampler.route_poses[index] = pose
+            sampler.route_summaries[index] = {
+                "path_index": index,
+                "route_role": "station",
+                **dict(sampler.last_summary(station_id) or {}),
+            }
+    return sampler
+
+
+def _add_relative_turn_sample(
+    sampler: EpisodeStationPoseSampler,
+    *,
+    index: int,
+    turn: Mapping[str, Any],
+) -> None:
+    source_index = int(turn["source_index"])
+    source = sampler.route_poses[source_index]
+    nominal_angle = float(turn["nominal_angle_rad"])
+    half_range = float(turn["angle_half_range_rad"])
+    sampled_angle = sample_uniform_yaw(
+        nominal_angle,
+        half_range,
+        seed=int(sampler.selector.seed),
+        salt=0x5455524E ^ int(zlib.crc32(f"wa05_turn_{index}".encode("utf-8"))),
+    )
+    source_yaw = quat_xyzw_to_yaw(source.quaternion)
+    target_yaw = normalize_angle(source_yaw + sampled_angle)
+    pose = Pose(
+        position=source.position,
+        quaternion=yaw_to_quat_xyzw(target_yaw),
+    )
+    sampler.route_poses[index] = pose
+    sampler.route_summaries[index] = {
+        "path_index": index,
+        "route_role": "relative_turn",
+        "source_index": source_index,
+        "source_xy": list(source.position[:2]),
+        "source_yaw": source_yaw,
+        "nominal_turn_angle": nominal_angle,
+        "turn_angle_half_range": half_range,
+        "sampled_turn_angle": sampled_angle,
+        "target_yaw": target_yaw,
+        "record_source": turn.get("record_source"),
+    }
+
+
+def _set_station_route_yaw(
+    sampler: EpisodeStationPoseSampler,
+    *,
+    station_id: str,
+    pose: Pose,
+    yaw: float,
+    inherited_from: int,
+) -> Pose:
+    updated_pose = Pose(
+        position=pose.position,
+        quaternion=yaw_to_quat_xyzw(yaw),
+        torso_height=pose.torso_height,
+    )
+    summary = dict(sampler.last_summary(station_id) or {})
+    sample = dict(summary.get("sample") or {})
+    sample["base_yaw"] = float(yaw)
+    summary.update(
+        {
+            "target_yaw": float(yaw),
+            "sample": sample,
+            "yaw_inherited_from_path_index": int(inherited_from),
+        }
+    )
+    sampler._cached_poses[station_id] = updated_pose, summary
+    sampler._summary_by_station[station_id] = summary
+    return updated_pose
+
+
+class SampledPathBaseDriver(BaseDriverAdapter):
+    """Execute the calibrated route with seed-owned waypoint poses."""
+
+    def __init__(
+        self,
+        env: Any,
+        obs: dict[str, Any],
+        *,
+        config: NavigationConfig,
+        sampler: EpisodeStationPoseSampler,
+    ) -> None:
+        super().__init__(env, obs, nav_config=config)
+        self._station_sampler = sampler
+        self._sampled_executor: Any = None
+        self._waypoint_summaries: dict[int, dict[str, Any]] = {}
+
+    def _manual_path_executor(self) -> Any:
+        executor = super()._manual_path_executor()
+        if executor is None or executor is self._sampled_executor:
+            return executor
+        for index, pose in self._station_sampler.route_poses.items():
+            if not 0 <= index < len(executor.samples):
+                raise ValueError(f"WA-05 sampled waypoint {index} is outside the manual path")
+            nominal = executor.samples[index]
+            executor.samples[index] = ManualBasePathSample(
+                index=index, xy=np.asarray(pose.position[:2], dtype=float),
+                yaw=quat_xyzw_to_yaw(pose.quaternion), name=nominal.name,
+            )
+            self._waypoint_summaries[index] = {
+                "path_index": index,
+                "nominal_xy": nominal.xy.tolist(),
+                "nominal_yaw": nominal.yaw,
+                **dict(self._station_sampler.route_summaries[index]),
+            }
+        self._sampled_executor = executor
+        return executor
+
+    def plan_and_move(self, *args: Any, **kwargs: Any) -> Any:
+        result = super().plan_and_move(*args, **kwargs)
+        result.details["sampled_path_waypoints"] = [
+            dict(self._waypoint_summaries[index])
+            for index in result.details.get("route_indices", ())
+            if index in self._waypoint_summaries
+        ]
+        return result
 
 
 @dataclass(frozen=True)
@@ -213,7 +427,7 @@ def station_aliases() -> dict[Any, str]:
 
     return {
         CUP_PICK_STATION: CUP_PICK_STATION,
-        CUP_A_PICK_STATION: CUP_A_PICK_STATION,
+        CUP_A_PICK_STATION: CUP_PICK_STATION,
         SINK_FILL_STATION: SINK_FILL_STATION,
         SERVICE_AREA_STATION: SERVICE_AREA_STATION,
         WATER_BUTTON_STATION: WATER_BUTTON_STATION,
@@ -221,7 +435,7 @@ def station_aliases() -> dict[Any, str]:
         (WATER_BUTTON_STATION, "cold_answer"): WATER_BUTTON_STATION,
         f"{WATER_BUTTON_STATION}:hot_answer": WATER_BUTTON_STATION,
         f"{WATER_BUTTON_STATION}:cold_answer": WATER_BUTTON_STATION,
-        "cup_A": CUP_A_PICK_STATION,
+        "cup_A": CUP_PICK_STATION,
         "sink_basin": SINK_FILL_STATION,
         "sink": SINK_FILL_STATION,
         "service_area": SERVICE_AREA_STATION,
@@ -257,6 +471,12 @@ def build_navigation_config(
         ),
         manual_base_path_segment_yaw_threshold=float(
             values.pop("manual_base_path_segment_yaw_threshold", 0.05)
+        ),
+        manual_base_path_intermediate_xy_tolerance=values.pop(
+            "manual_base_path_intermediate_xy_tolerance", None,
+        ),
+        manual_base_path_intermediate_yaw_tolerance=values.pop(
+            "manual_base_path_intermediate_yaw_tolerance", None,
         ),
         base_velocity_profile_enabled=bool(
             values.pop("base_velocity_profile_enabled", True)
@@ -356,19 +576,20 @@ def build_navigation_assembly(
     """Assemble calibrated or generated station navigation without previous WA2 code."""
 
     adapter = RoboCasaNavigationAdapter(env, obs, station_specs_provider=station_specs)
-    raw_driver = base_driver or BaseDriverAdapter(env, obs, nav_config=config)
-    driver = StationHeightBaseDriver(raw_driver, env)
-    pose_provider = driver if hasattr(driver, "current_base_xy") else adapter
     aliases = station_aliases()
     if config.use_station_base_poses:
         if config.station_base_pose_file is None:
             raise ValueError("WA-05 station poses require station_base_pose_file")
-        sampler: Any = StationPoseSampler.from_file(
-            config.station_base_pose_file,
-            config=config,
+        sampler: Any = build_episode_station_sampler(
+            config,
             seed=int(seed),
-            base_xy_provider=pose_provider,
-            station_aliases=aliases,
+            base_xy_provider=adapter,
+        )
+        raw_driver = base_driver or SampledPathBaseDriver(
+            env,
+            obs,
+            config=config,
+            sampler=sampler,
         )
     else:
         sampler = SimpleStationSampler(
@@ -378,6 +599,11 @@ def build_navigation_assembly(
             ),
             seeds=SeedStream(base_seed=int(seed), namespace="wa_05_navigation"),
         )
+        raw_driver = base_driver or BaseDriverAdapter(env, obs, nav_config=config)
+    driver = StationHeightBaseDriver(raw_driver, env)
+    pose_provider = driver if hasattr(driver, "current_base_xy") else adapter
+    if isinstance(sampler, EpisodeStationPoseSampler):
+        sampler.base_xy_provider = pose_provider
     planner = None
     if not config.manual_base_path_enabled and config.use_station_astar_paths:
         planner = StationPathPlanner(obstacles=adapter.build_fixture_obstacles, config=config)
@@ -436,13 +662,16 @@ def _first_available_xy(*values: np.ndarray | None) -> np.ndarray | None:
 __all__ = [
     "CUP_A_PICK_STATION",
     "CUP_PICK_STATION",
+    "EpisodeStationPoseSampler",
     "NavigationAssembly",
     "SERVICE_AREA_STATION",
     "SINK_FILL_STATION",
+    "SampledPathBaseDriver",
     "StationHeightBaseDriver",
     "WATER_BUTTON_STATION",
     "build_navigation_assembly",
     "build_navigation_config",
+    "build_episode_station_sampler",
     "move_station_torso_to_height",
     "station_aliases",
     "station_specs",

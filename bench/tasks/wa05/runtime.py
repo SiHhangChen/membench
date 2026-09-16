@@ -105,7 +105,7 @@ def _initialize(descriptor: Any, env: Any, observation: Mapping[str, Any]):
     updated, base = apply_robot_base_initial_state(
         env, updated, config=descriptor.config.initial_state.robot_base,
         nav_config=descriptor.navigation, episode=descriptor.episode_plan,
-        initial_objects=initial_objects, seed=descriptor.scene.scene_seed,
+        initial_objects=initial_objects, seed=descriptor.episode_plan.seed,
     )
     evaluator = WA05Evaluator(
         cup_id=env.episode_plan.cup_id,

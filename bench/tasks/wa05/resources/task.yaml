@@ -25,8 +25,8 @@ episode:
 
 initial_state:
   robot_base:
-    mode: manual_path_sample
-    sample_index: 4
+    mode: station_sample
+    station_id: cup_pick_station
   objects:
     cups:
       cup_A:
@@ -44,10 +44,10 @@ initial_state:
       sampling_inset_xy: [0.003, 0.003]
     service_slots:
       # Fixed 12 x 12 cm service region on the counter outer-edge strip.
-      # slot_1 now targets the left-hand slot (mirrors WA-02's slot_2 region).
+      # slot_1 is shifted 5 cm farther left along counter-local X.
       regions:
         slot_1:
-          region_center_xy: [-1.095, -0.500]
+          region_center_xy: [-1.145, -0.500]
           region_size_xy: [0.1200, 0.120]
       # Retained for configuration-schema compatibility. Placement targets are
       # now fixed at each region center, so this margin is not used for sampling.
@@ -90,6 +90,8 @@ navigation:
   manual_base_path_xy_tolerance: 0.12
   manual_base_path_yaw_tolerance: 0.08
   manual_base_path_segment_yaw_threshold: 0.05
+  manual_base_path_intermediate_xy_tolerance: 0.03
+  manual_base_path_intermediate_yaw_tolerance: 0.08
   # WA05 uses broad, calibrated corridors. These bounded profile limits stay
   # below the controller maxima while shortening each long traverse and turn.
   base_velocity_profile_enabled: true
@@ -220,13 +222,9 @@ operations:
     placement_object_upright: true
     placement_entry_z_offset: 0.12
     placement_exit_z_offset: 0.22
-    # Only enter from the robot-facing side of the service region. In the
-    # world tabletop frame, -X is the center ray; +/-60 degrees gives a
-    # 120-degree admissible sector. Candidates are generated center-first.
-    placement_approach_sector:
-      center_deg: 180.0
-      half_width_deg: 60.0
-      step_deg: 15.0
+    # These are place-to-entry angles. The opposite entry-to-place motion is
+    # restricted to the one-sided range 0 to -56 degrees.
+    placement_approach_angles_deg: [180.0, 165.0, 150.0, 135.0, 124.0]
     # A nonzero horizontal entry distance is required for the sector to affect
     # the physical approach path rather than only the post-release exit.
     placement_entry_standoff: 0.10
@@ -246,12 +244,9 @@ operations:
     place_settle_steps: 3
     clearance_settle_steps: 2
     retreat_settle_steps: 1
-    # Pre-release safety gate. Final staging independently requires <= 0.12 m,
-    # counter contact, and an upright cup, leaving 0.02 m verification margin.
+    # Placement is released first, then record_verified_staging independently
+    # verifies <= 0.12 m, region membership, support, uprightness, and release.
     service_target_xy_tolerance: 0.10
-    require_pre_release_check: true
-    pre_release_min_height_from_slot: 0.0
-    pre_release_max_height_from_slot: 0.10
     release_distance: 0.12
     by_slot:
       slot_1:
@@ -289,8 +284,8 @@ operations:
     sink_exterior_local_x_min: -0.4724099655124329
     boundary_geometry_tolerance: 0.002
     boundary_overshoot_tolerance: 0.020
-    # Follow the recorded base segment 8 -> 9. In counter-local coordinates it
-    # moves delta=(-0.813, -0.021), hence dy/dx=0.0258302583.
+    # Standalone-probe fallback. The expert derives this direction from the
+    # sampled P10 service target and then navigates there directly.
     route_local_y_per_x: 0.02583025830258303
     boundary_translation_gain: 3.0
     boundary_min_action: 0.025

@@ -32,7 +32,7 @@ from bench.tasks.wa05.domain.geometry import (
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 DEFAULT_TASK_CONFIG_FILE = PACKAGE_ROOT / "resources" / "task.yaml"
-DEFAULT_INITIAL_STATION_ID = "sink_fill_station"
+DEFAULT_INITIAL_STATION_ID = "cup_pick_station"
 
 
 def _normalize_degrees(value: float) -> float:

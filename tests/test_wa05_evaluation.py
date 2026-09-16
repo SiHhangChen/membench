@@ -297,7 +297,7 @@ def test_runtime_initialize_mounts_fresh_evaluator(monkeypatch) -> None:
         lambda env, updated, **kwargs: ({"obs": 2}, {"base": True}),
     )
 
-    plan = SimpleNamespace(cup_id=CUP_ID, service_slot=SERVICE_SLOT)
+    plan = SimpleNamespace(cup_id=CUP_ID, service_slot=SERVICE_SLOT, seed=7)
 
     class _FakeEnv:
         def configure_episode(self, episode: object) -> None:
