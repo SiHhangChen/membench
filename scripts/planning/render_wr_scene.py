@@ -51,8 +51,11 @@ def _render_free_camera(
         camera.distance = distance
         camera.azimuth = azimuth
         camera.elevation = elevation
-        renderer.update_scene(env.sim.data._data, camera=camera)
-        rgb = renderer.render().copy()[::-1]
+        options = mujoco.MjvOption()
+        options.geomgroup[0] = int(getattr(env, "render_collision_mesh", False))
+        options.geomgroup[1] = int(getattr(env, "render_visual_mesh", True))
+        renderer.update_scene(env.sim.data._data, camera=camera, scene_option=options)
+        rgb = renderer.render().copy()
     finally:
         renderer.close()
     path = output_dir / f"{label}.png"

@@ -24,6 +24,7 @@ def rotate_in_place(
     holding_object_name: str | None = None,
     holding_drop_tolerance: float = 0.04,
     velocity_limits: BaseVelocityLimits | None = None,
+    rotation_direction: int | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """原地旋转到目标yaw，完全不执行xy移动。
 
@@ -59,6 +60,18 @@ def rotate_in_place(
         # 检查是否完成
         if abs(yaw_error) <= yaw_tolerance:
             break
+
+        # Some task motions demonstrate a fixed turn direction. In that case
+        # retain the requested signed branch even when it is slightly longer
+        # than pi (for example, a clockwise -184 degree half-turn).
+        if rotation_direction is not None:
+            direction = int(rotation_direction)
+            if direction not in (-1, 1):
+                raise ValueError("rotation_direction must be -1, 1, or None")
+            if direction < 0 and yaw_error > 0.0:
+                yaw_error -= 2.0 * np.pi
+            elif direction > 0 and yaw_error < 0.0:
+                yaw_error += 2.0 * np.pi
 
         # 仅旋转，xy动作为0
         split = env.robots[0].composite_controller._action_split_indexes
@@ -128,6 +141,7 @@ def rotate_in_place(
         "drift": final_drift,
         "max_drift": max_drift,
         "steps": steps,
+        "rotation_direction": rotation_direction,
         "holding_motion": holding_motion,
         "checks": {
             "yaw": abs(final_yaw_error) <= yaw_tolerance,

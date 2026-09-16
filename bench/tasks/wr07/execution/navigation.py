@@ -52,11 +52,36 @@ class SourcePlateStationSampler:
         self._delegate = delegate
         self._env = env
         self._summary_by_station: dict[str, dict[str, Any]] = {}
+        # Circle stations normally resample on every call.  WR-07 observes
+        # the source area and then navigates to the selected source slot; keep
+        # those two calls on the same sampled source pose, as the former
+        # discrete calibrated candidates did.
+        self._source_circle_pose: Pose | None = None
+        self._source_circle_summary: dict[str, Any] | None = None
 
     def sample(self, station_name: str, *, purpose: str | None = None) -> Pose:
-        pose = self._delegate.sample(station_name, purpose=purpose)
-        summary = dict(self._delegate.last_summary(station_name) or {})
+        station_id_resolver = getattr(self._delegate, "station_id", None)
+        station_id = (
+            station_id_resolver(station_name, purpose=purpose)
+            if callable(station_id_resolver)
+            else station_name
+        )
+        is_source_station = str(station_id) == "counter_pick_station"
+        if is_source_station and self._source_circle_pose is not None:
+            pose = self._source_circle_pose
+            summary = dict(self._source_circle_summary or {})
+            summary["purpose"] = purpose
+        else:
+            pose = self._delegate.sample(station_name, purpose=purpose)
+            summary = dict(self._delegate.last_summary(station_name) or {})
         sample = dict(summary.get("sample") or {})
+        if (
+            is_source_station
+            and self._source_circle_pose is None
+            and isinstance(sample.get("circle"), dict)
+        ):
+            self._source_circle_pose = pose
+            self._source_circle_summary = dict(summary)
         settings = sample.get("object_relative_xy")
         if not isinstance(settings, dict) or not bool(settings.get("enabled", False)):
             self._summary_by_station[station_name] = summary
@@ -116,6 +141,8 @@ class SourcePlateStationSampler:
     def reset_choices(self) -> None:
         self._delegate.reset_choices()
         self._summary_by_station.clear()
+        self._source_circle_pose = None
+        self._source_circle_summary = None
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._delegate, name)
@@ -130,10 +157,11 @@ def _pose_yaw(pose: Pose) -> float:
 class StationHeightBaseDriver:
     """Apply the sampled station torso height after Base XY/yaw navigation."""
 
-    def __init__(self, delegate: Any, env: Any, *, torso_mover: Any = None):
+    def __init__(self, delegate: Any, env: Any, *, torso_mover: Any = None, seed: int = 0):
         self._delegate = delegate
         self._env = env
         self._torso_mover = torso_mover or move_station_torso_to_height
+        self._seed = int(seed)
 
     def plan_and_move(
         self,
@@ -225,6 +253,35 @@ class StationHeightBaseDriver:
         from bench.execution.navigation.rotation_primitive import move_straight, rotate_in_place
         from bench.execution.navigation.velocity_profile import BaseVelocityLimits
 
+        # The source and dining stations face opposite directions.  During
+        # held transport, sample the signed half-turn itself so the robot
+        # always rotates in the demonstrated (clockwise) direction.  The
+        # perturbation is independent from station XY/yaw draws.
+        turn_randomization = None
+        if desired_yaw is not None:
+            source_yaw = 1.5697450892050213
+            target_station_yaw = -1.551592653589793
+            base_turn = target_station_yaw - source_yaw
+            # Keep the signed difference near -pi rather than wrapping it.
+            if base_turn > 0.0:
+                base_turn -= 2.0 * np.pi
+            turn_rng = np.random.default_rng(np.random.SeedSequence([self._seed, 0x57523037, 0x5455524E]))
+            perturbation = float(turn_rng.uniform(-np.deg2rad(5.0), np.deg2rad(5.0)))
+            initial_yaw_for_turn = float(delegate.current_base_yaw())
+            sampled_turn = base_turn + perturbation
+            desired_yaw = initial_yaw_for_turn + sampled_turn
+            turn_randomization = {
+                "base_turn_rad": float(base_turn),
+                "base_turn_deg": float(np.rad2deg(base_turn)),
+                "perturbation_rad": perturbation,
+                "perturbation_deg": float(np.rad2deg(perturbation)),
+                "sampled_turn_rad": float(sampled_turn),
+                "sampled_turn_deg": float(np.rad2deg(sampled_turn)),
+                "initial_yaw": initial_yaw_for_turn,
+                "target_yaw": float(desired_yaw),
+                "range_deg": [float(np.rad2deg(base_turn - np.deg2rad(5.0))), float(np.rad2deg(base_turn + np.deg2rad(5.0)))],
+            }
+
         right = self._env.robots[0].composite_controller.part_controllers["right"]
         arm_qpos = qpos_for_controller(self._env, right)
         velocity_limits = (
@@ -268,6 +325,7 @@ class StationHeightBaseDriver:
             holding_object_name=None,
             holding_drop_tolerance=1.0e6,
             velocity_limits=velocity_limits,
+            rotation_direction=-1,
         )
         delegate._obs = obs
         rotation = _navigation_stage_result(
@@ -283,6 +341,7 @@ class StationHeightBaseDriver:
                 "mode": "rotate_then_translate",
                 "phases": phases,
                 "failed_phase": "rotate",
+                "turn_randomization": turn_randomization,
             }
             return rotation
         rotation_status = self._holding_object_status(holding)
@@ -294,6 +353,7 @@ class StationHeightBaseDriver:
                 "mode": "rotate_then_translate",
                 "phases": phases,
                 "failed_phase": "rotate",
+                "turn_randomization": turn_randomization,
             }
             return rotation
 
@@ -336,6 +396,7 @@ class StationHeightBaseDriver:
                 "mode": "rotate_then_translate",
                 "phases": phases,
                 "failed_phase": "translate" if not translation.success else None,
+                "turn_randomization": turn_randomization,
             }
             return translation
 
@@ -379,6 +440,7 @@ class StationHeightBaseDriver:
                     "mode": "rotate_then_translate",
                     "phases": phases,
                     "failed_phase": "final_yaw",
+                    "turn_randomization": turn_randomization,
                 }
                 return correction
             result = correction
@@ -390,6 +452,7 @@ class StationHeightBaseDriver:
             "phases": phases,
             "failed_phase": None,
             "final_yaw_error": float(final_yaw_error),
+            "turn_randomization": turn_randomization,
         }
         result.details["holding_motion"] = self._holding_object_status(holding)
         return result
@@ -611,7 +674,7 @@ def build_navigation_assembly(
         if base_driver is not None
         else BaseDriverAdapter(env, obs, nav_config=config)
     )
-    driver = StationHeightBaseDriver(raw_driver, env)
+    driver = StationHeightBaseDriver(raw_driver, env, seed=seed)
     base_pose_provider = driver if hasattr(driver, "current_base_xy") else adapter
     sampler = _build_station_sampler(
         adapter, config, seed=seed, base_pose_provider=base_pose_provider

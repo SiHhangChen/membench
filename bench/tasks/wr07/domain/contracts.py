@@ -8,13 +8,62 @@ from pathlib import Path
 from typing import Any, Mapping
 
 TASK_ID = "WR-07"
-TASK_REVISION = "WR07-v8-color-match-single-transport"
+TASK_REVISION = "WR07-v14-texture-randomization"
 ENV_NAME = "WR07MatchMilkCartonToColoredSugarPlate"
 DISPLAY_NAME = "Move the milk carton to the matching colored sugar plate"
 
 ITEM_ID = "milk_carton"
 ITEM_IDS = (ITEM_ID,)
 ITEM_LABELS = {ITEM_ID: "milk carton"}
+
+# Only assets that load from repository-relative dependencies are included in
+# the first randomized carton pool.  The AIGen milk models currently refer to
+# a machine-local absolute texture path and are therefore intentionally kept
+# out of the benchmark pool until those dependencies are repaired.
+MILK_CARTON_ASSET_BY_TYPE = {
+    "milk_0": "objaverse/milk/milk_0/model.xml",
+    "milk_1": "objaverse/milk/milk_1/model.xml",
+    "milk_3": "objaverse/milk/milk_3/model.xml",
+    "milk_4": "objaverse/milk/milk_4/model.xml",
+    "milk_5": "objaverse/milk/milk_5/model.xml",
+    "milk_7": "objaverse/milk/milk_7/model.xml",
+    "milk_9": "objaverse/milk/milk_9/model.xml",
+    "milk_10": "objaverse/milk/milk_10/model.xml",
+}
+# WR-07 uses one stable carton geometry. The broader asset map remains here
+# for tooling and previews, but episode sampling does not vary object type.
+MILK_CARTON_TYPES = ("milk_1",)
+
+# Appearance randomization keeps the carton mesh and collision model fixed.
+# Each profile recolors the green region of the existing milk_1 texture and
+# applies a matching optical finish after MuJoCo compilation.
+MILK_CARTON_MATERIAL_PROFILES = {
+    "matte": {
+        "texture_rgb": (156, 92, 38),
+        "specular": 0.08,
+        "shininess": 0.08,
+        "reflectance": 0.0,
+    },
+    "satin": {
+        "texture_rgb": (40, 160, 82),
+        "specular": 0.28,
+        "shininess": 0.25,
+        "reflectance": 0.02,
+    },
+    "glossy": {
+        "texture_rgb": (38, 105, 210),
+        "specular": 0.62,
+        "shininess": 0.65,
+        "reflectance": 0.08,
+    },
+    "foil": {
+        "texture_rgb": (145, 160, 175),
+        "specular": 0.88,
+        "shininess": 0.92,
+        "reflectance": 0.18,
+    },
+}
+MILK_CARTON_MATERIALS = tuple(MILK_CARTON_MATERIAL_PROFILES)
 SOURCE_SLOTS = ("source_left", "source_center", "source_right")
 TARGET_SLOTS = ("target_left", "target_center", "target_right")
 
@@ -39,12 +88,14 @@ COLOR_RGBA = {
 class RobotBaseMode(str, Enum):
     PRESERVE_RESET_POSE = "preserve_reset_pose"
     EXPLICIT_POSE = "explicit_pose"
+    RESET_CIRCLE = "reset_circle"
 
 @dataclass(frozen=True)
 class RobotBaseConfig:
     mode: RobotBaseMode
     xy: tuple[float, float] | None = None
     yaw: float | None = None
+    radius_m: float | None = None
 
 @dataclass(frozen=True)
 class InitialStateConfig:
@@ -101,6 +152,11 @@ class EpisodePlan:
     target_item_offset_xy_by_item: Mapping[str, tuple[float, float]]
     target_item_yaw_by_item: Mapping[str, float]
     item_sample_radius_m: float
+    carton_type: str
+    carton_asset: str
+    carton_material: str
+    carton_type_candidates: tuple[str, ...]
+    carton_material_candidates: tuple[str, ...]
     transport_order: tuple[str, ...]
     max_horizon: int
 
@@ -126,7 +182,9 @@ class RunContext:
 __all__ = [
     "ActionConfig", "COLOR_NAMES", "COLOR_RGBA", "DISPLAY_NAME", "ENV_NAME",
     "EpisodePlan", "EpisodeTargets", "ITEM_ID", "ITEM_IDS",
-    "ITEM_LABELS", "InitialStateConfig", "RobotBaseConfig", "RobotBaseMode",
+    "ITEM_LABELS", "InitialStateConfig", "MILK_CARTON_ASSET_BY_TYPE",
+    "MILK_CARTON_MATERIAL_PROFILES", "MILK_CARTON_MATERIALS", "MILK_CARTON_TYPES",
+    "RobotBaseConfig", "RobotBaseMode",
     "RunContext", "SOURCE_SLOTS", "SceneConfig", "TARGET_SLOTS", "TASK_ID",
     "TASK_REVISION", "TaskConfig", "TaskDefinition",
 ]

@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import random
+from collections.abc import Sequence
 from math import cos, isfinite, pi, sin, sqrt
 from typing import Any
 
 from bench.tasks.wr07.domain.contracts import (
     COLOR_NAMES, DISPLAY_NAME, ENV_NAME, EpisodePlan, ITEM_ID, ITEM_IDS,
-    SOURCE_SLOTS, TARGET_SLOTS, TASK_ID, TaskDefinition, SceneConfig,
+    MILK_CARTON_ASSET_BY_TYPE, MILK_CARTON_MATERIALS, MILK_CARTON_TYPES,
+    SOURCE_SLOTS, TARGET_SLOTS,
+    TASK_ID, TaskDefinition, SceneConfig,
 )
 
 def validate_source_slot(value: Any) -> str:
@@ -28,6 +31,18 @@ def validate_color(value: Any) -> str:
     if color not in COLOR_NAMES:
         raise ValueError(f"invalid WR-07 color: {color!r}")
     return color
+
+def validate_carton_type(value: Any) -> str:
+    carton_type = str(value)
+    if carton_type not in MILK_CARTON_TYPES:
+        raise ValueError(f"invalid WR-07 milk-carton type: {carton_type!r}")
+    return carton_type
+
+def validate_carton_material(value: Any) -> str:
+    material = str(value)
+    if material not in MILK_CARTON_MATERIALS:
+        raise ValueError(f"invalid WR-07 milk-carton material: {material!r}")
+    return material
 
 def resolve_task_definition(**values: Any) -> TaskDefinition:
     if str(values.get("id", TASK_ID)) != TASK_ID:
@@ -59,6 +74,16 @@ def resolve_episode_plan(*, seed: int, **values: Any) -> EpisodePlan:
         raise ValueError("WR-07 requires exactly three visible colors")
     item_radius = _nonnegative_scalar(values.pop("item_sample_radius_m", 0.045), label="item_sample_radius_m")
     horizon = int(values.pop("max_horizon", 3600))
+    carton_types = _candidate_pool(
+        values.pop("carton_type_candidates", MILK_CARTON_TYPES),
+        allowed=MILK_CARTON_TYPES,
+        label="carton_type_candidates",
+    )
+    carton_materials = _candidate_pool(
+        values.pop("carton_material_candidates", MILK_CARTON_MATERIALS),
+        allowed=MILK_CARTON_MATERIALS,
+        label="carton_material_candidates",
+    )
     values.pop("color_pool", None)
     if values:
         raise ValueError("unknown WR-07 episode settings: " + ", ".join(sorted(values)))
@@ -73,6 +98,14 @@ def resolve_episode_plan(*, seed: int, **values: Any) -> EpisodePlan:
     target_by_color = {color: slot for slot, color in target_by_slot.items()}
     source_slot = rng.choice(SOURCE_SLOTS)
     source_color = source_by_slot[source_slot]
+    source_offset = _sample_disk(rng, item_radius)
+    source_yaw = rng.uniform(-pi, pi)
+    target_offset = _sample_disk(rng, item_radius)
+    target_yaw = rng.uniform(-pi, pi)
+    # Draw appearance choices after all legacy WR-07 decisions so adding the
+    # pools does not perturb existing color, slot, offset, or yaw sequences.
+    carton_type = rng.choice(carton_types)
+    carton_material = rng.choice(carton_materials)
     return EpisodePlan(
         seed=episode_seed,
         source_plate_color_by_slot=source_by_slot,
@@ -80,11 +113,16 @@ def resolve_episode_plan(*, seed: int, **values: Any) -> EpisodePlan:
         source_slot_by_item={ITEM_ID: source_slot},
         source_color_by_item={ITEM_ID: source_color},
         target_slot_by_color=target_by_color,
-        source_item_offset_xy_by_item={ITEM_ID: _sample_disk(rng, item_radius)},
-        source_item_yaw_by_item={ITEM_ID: rng.uniform(-pi, pi)},
-        target_item_offset_xy_by_item={ITEM_ID: _sample_disk(rng, item_radius)},
-        target_item_yaw_by_item={ITEM_ID: rng.uniform(-pi, pi)},
+        source_item_offset_xy_by_item={ITEM_ID: source_offset},
+        source_item_yaw_by_item={ITEM_ID: source_yaw},
+        target_item_offset_xy_by_item={ITEM_ID: target_offset},
+        target_item_yaw_by_item={ITEM_ID: target_yaw},
         item_sample_radius_m=item_radius,
+        carton_type=carton_type,
+        carton_asset=MILK_CARTON_ASSET_BY_TYPE[carton_type],
+        carton_material=carton_material,
+        carton_type_candidates=carton_types,
+        carton_material_candidates=carton_materials,
         transport_order=ITEM_IDS,
         max_horizon=horizon,
     )
@@ -105,6 +143,22 @@ def _nonnegative_scalar(value: Any, *, label: str) -> float:
         raise ValueError(f"WR-07 {label} must be finite and non-negative")
     return resolved
 
+def _candidate_pool(
+    value: Any,
+    *,
+    allowed: tuple[str, ...],
+    label: str,
+) -> tuple[str, ...]:
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+        raise ValueError(f"WR-07 {label} must be a non-empty sequence")
+    candidates = tuple(str(item) for item in value)
+    if not candidates or len(set(candidates)) != len(candidates):
+        raise ValueError(f"WR-07 {label} must be non-empty and unique")
+    unknown = sorted(set(candidates) - set(allowed))
+    if unknown:
+        raise ValueError(f"unknown WR-07 {label}: " + ", ".join(unknown))
+    return candidates
+
 def public_task_prompt() -> str:
     return (
         "Remember the color of the sugar plate holding the milk carton. "
@@ -121,5 +175,6 @@ def public_return_prompt() -> str:
 __all__ = [
     "public_initial_prompt", "public_return_prompt", "public_task_prompt",
     "resolve_episode_plan", "resolve_scene_config", "resolve_task_definition",
-    "validate_color", "validate_source_slot", "validate_target_slot",
+    "validate_carton_material", "validate_carton_type", "validate_color",
+    "validate_source_slot", "validate_target_slot",
 ]

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from bench.execution.plan_builder import finish_plan, navigate, operate
 from bench.tasks.contracts import ExpertPlanInputs
-from bench.tasks.wr07.domain.contracts import ITEM_ID
+from bench.tasks.wr07.domain.contracts import ITEM_ID, TASK_REVISION
 
 def build_expert_plan(inputs: ExpertPlanInputs):
     episode = inputs.episode
@@ -28,7 +28,16 @@ def build_expert_plan(inputs: ExpertPlanInputs):
         operate("return_arm", item, name="return_arm_after_target_place", metadata={**dict(actions.return_arm_empty), "stage": "return_after_target_place"}),
     ]
     return finish_plan(episode, stages, metadata={
-        "task_revision": "WR07-v8-color-match-single-transport",
+        "task_revision": TASK_REVISION,
+        "carton_type": str(facts["carton_type"]),
+        "carton_asset": str(facts["carton_asset"]),
+        "carton_material": str(facts["carton_material"]),
+        "carton_type_candidates": list(facts["carton_type_candidates"]),
+        "carton_material_candidates": list(facts["carton_material_candidates"]),
+        "carton_combination_count": int(
+            len(facts["carton_type_candidates"])
+            * len(facts["carton_material_candidates"])
+        ),
         "source_slot": source_slot,
         "source_color": source_color,
         "target_slot": target_slot,

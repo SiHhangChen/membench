@@ -1,4 +1,4 @@
-"""RoboCasa scene and physical checks for WR-07 v8.
+"""RoboCasa scene and physical checks for WR-07 v9.
 
 Three colored sugar plates are visible on each side of the kitchen.  The
 milk carton starts on one source plate and must be placed on the matching
@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+import mujoco
 import numpy as np
 
 from robocasa.environments.kitchen.kitchen import Kitchen
@@ -17,9 +18,16 @@ from robocasa.models import assets_root
 from robocasa.utils import object_utils as OU
 
 from bench.tasks.wr07.domain.contracts import (
-    COLOR_RGBA, ITEM_ID, ITEM_LABELS, SOURCE_SLOTS, TARGET_SLOTS,
+    COLOR_RGBA, ITEM_ID, ITEM_LABELS, MILK_CARTON_ASSET_BY_TYPE,
+    MILK_CARTON_MATERIAL_PROFILES, SOURCE_SLOTS, TARGET_SLOTS,
 )
-from bench.tasks.wr07.domain.episode import validate_color, validate_source_slot, validate_target_slot
+from bench.tasks.wr07.domain.episode import (
+    validate_carton_material,
+    validate_carton_type,
+    validate_color,
+    validate_source_slot,
+    validate_target_slot,
+)
 from bench.tasks.wr07.domain.semantics import (
     PhysicalState, SemanticState, evaluate_success, latch_source_color_memory,
     record_initial_source, record_item_picked, record_target_attempt,
@@ -30,7 +38,10 @@ from bench.tasks.wr07.evaluation import WR07EvaluationSnapshot, WR07Evaluator
 # Keep the rectangular tray geometry used by the original WR-07 scene.  The
 # tray bodies are still recolored per episode to carry the matching-color cue.
 TRAY_XML = f"{assets_root}/objects/lightwheel/oven_tray/OvenTray001/model.xml"
-MILK_CARTON_XML = f"{assets_root}/objects/objaverse/milk/milk_1/model.xml"
+MILK_CARTON_XML_BY_TYPE = {
+    carton_type: f"{assets_root}/objects/{relative_path}"
+    for carton_type, relative_path in MILK_CARTON_ASSET_BY_TYPE.items()
+}
 COUNTER_FIXTURE_NAME = "counter_1_main_group_1"
 MEAL_FIXTURE_NAME = "island_island_group_1"
 MEAL_PAPER_TOWEL_FIXTURE_NAME = "papertowel_island_group_1"
@@ -76,6 +87,9 @@ class WR07MatchMilkCartonToColoredSugarPlate(Kitchen):
         source_item_yaw_by_item: Mapping[str, float] | None = None,
         target_item_offset_xy_by_item: Mapping[str, Any] | None = None,
         target_item_yaw_by_item: Mapping[str, float] | None = None,
+        carton_type: str = "milk_1",
+        carton_asset: str | None = None,
+        carton_material: str = "satin",
         item_sample_radius_m: float = 0.045,
         plate_threshold: float = 0.16,
         **kwargs: Any,
@@ -97,6 +111,12 @@ class WR07MatchMilkCartonToColoredSugarPlate(Kitchen):
         self.target_item_offset_xy_by_item = {ITEM_ID: _xy((target_item_offset_xy_by_item or {}).get(ITEM_ID, (0.0, 0.0)), label="target item offset")}
         self.source_item_yaw_by_item = {ITEM_ID: float((source_item_yaw_by_item or {}).get(ITEM_ID, 0.0))}
         self.target_item_yaw_by_item = {ITEM_ID: float((target_item_yaw_by_item or {}).get(ITEM_ID, 0.0))}
+        self.carton_type = validate_carton_type(carton_type)
+        expected_asset = MILK_CARTON_ASSET_BY_TYPE[self.carton_type]
+        if carton_asset is not None and str(carton_asset) != expected_asset:
+            raise ValueError("WR-07 carton_asset does not match carton_type")
+        self.carton_asset = expected_asset
+        self.carton_material = validate_carton_material(carton_material)
         self.item_sample_radius_m = float(item_sample_radius_m)
         self.plate_threshold = float(plate_threshold)
         if not np.isfinite(self.item_sample_radius_m) or self.item_sample_radius_m < 0.0:
@@ -165,7 +185,7 @@ class WR07MatchMilkCartonToColoredSugarPlate(Kitchen):
         source_name = self.source_plate_name(self.source_slot_by_item[ITEM_ID])
         configs.append(dict(
             name=ITEM_ID,
-            obj_groups=MILK_CARTON_XML,
+            obj_groups=MILK_CARTON_XML_BY_TYPE[self.carton_type],
             object_scale=[0.75, 0.75, 0.75],
             graspable=True,
             init_robot_here=True,
@@ -185,6 +205,8 @@ class WR07MatchMilkCartonToColoredSugarPlate(Kitchen):
             raise RuntimeError(f"WR-07 reset is missing sampled placements: {missing}")
         record_initial_source(self._semantic_state, self.source_slot_by_item[ITEM_ID], self.source_color_by_item[ITEM_ID])
 
+
+
     def _reset_internal(self) -> None:
         super()._reset_internal()
         self._source_plate_centers = {slot: self._obj_pos(self.source_plate_name(slot)).copy() for slot in SOURCE_SLOTS}
@@ -198,6 +220,7 @@ class WR07MatchMilkCartonToColoredSugarPlate(Kitchen):
         self._target_surface_z = float(np.mean([pos[2] for pos in self._target_plate_centers.values()]))
         self._apply_milk_carton_pose()
         self._apply_plate_colors()
+        self._apply_carton_material()
         self._update_task_state()
 
     def configure_episode(self, episode: Any) -> None:
@@ -205,6 +228,12 @@ class WR07MatchMilkCartonToColoredSugarPlate(Kitchen):
         expected_target = dict(episode.target_plate_color_by_slot)
         if expected_source != self.source_plate_color_by_slot or expected_target != self.target_plate_color_by_slot:
             raise ValueError("WR-07 environment and EpisodePlan plate colors differ")
+        if validate_carton_type(episode.carton_type) != self.carton_type:
+            raise ValueError("WR-07 environment and EpisodePlan carton types differ")
+        if str(episode.carton_asset) != self.carton_asset:
+            raise ValueError("WR-07 EpisodePlan carton asset does not match carton type")
+        if validate_carton_material(episode.carton_material) != self.carton_material:
+            raise ValueError("WR-07 environment and EpisodePlan carton materials differ")
 
     def source_plate_name(self, slot: str) -> str:
         return f"source_plate_{validate_source_slot(slot).removeprefix('source_')}"
@@ -254,6 +283,79 @@ class WR07MatchMilkCartonToColoredSugarPlate(Kitchen):
             self._set_body_color(self.source_plate_name(slot), COLOR_RGBA[color])
         for slot, color in self.target_plate_color_by_slot.items():
             self._set_body_color(self.target_plate_name(slot), COLOR_RGBA[color])
+
+    def _apply_carton_material(self) -> None:
+        """Recolor the milk texture and apply its matching optical finish."""
+        profile = MILK_CARTON_MATERIAL_PROFILES[self.carton_material]
+        model = self.sim.model
+        root = int(self.obj_body_id[ITEM_ID])
+        parents = np.asarray(model.body_parentid, dtype=int)
+        material_ids: set[int] = set()
+        for geom_id, body_id in enumerate(np.asarray(model.geom_bodyid, dtype=int)):
+            current = int(body_id)
+            belongs = False
+            while current > 0:
+                if current == root:
+                    belongs = True
+                    break
+                current = int(parents[current])
+            if not belongs or float(model.geom_rgba[geom_id, 3]) <= 0.0:
+                continue
+            material_id = int(model.geom_matid[geom_id])
+            if material_id >= 0:
+                material_ids.add(material_id)
+            # A neutral multiplier displays the recolored texture directly.
+            model.geom_rgba[geom_id, :] = (1.0, 1.0, 1.0, 1.0)
+        for material_id in material_ids:
+            model.mat_specular[material_id] = float(profile["specular"])
+            model.mat_shininess[material_id] = float(profile["shininess"])
+            model.mat_reflectance[material_id] = float(profile["reflectance"])
+
+        raw_model = model._model
+        texture_ids = {
+            int(texture_id)
+            for material_id in material_ids
+            for texture_id in np.asarray(raw_model.mat_texid[material_id]).reshape(-1)
+            if int(texture_id) >= 0
+        }
+        cache = getattr(self, "_carton_texture_original_data", None)
+        if cache is None:
+            cache = {}
+            self._carton_texture_original_data = cache
+        target = np.asarray(profile["texture_rgb"], dtype=np.float32)
+        source_green = np.asarray((0, 107, 14), dtype=np.float32)
+        white = np.full(3, 255.0, dtype=np.float32)
+        green_axis = source_green - white
+        green_axis_norm = float(np.dot(green_axis, green_axis))
+        for texture_id in texture_ids:
+            address = int(raw_model.tex_adr[texture_id])
+            width = int(raw_model.tex_width[texture_id])
+            height = int(raw_model.tex_height[texture_id])
+            channels = int(raw_model.tex_nchannel[texture_id])
+            size = width * height * channels
+            original = cache.setdefault(
+                texture_id,
+                np.asarray(raw_model.tex_data[address:address + size], dtype=np.uint8).copy(),
+            )
+            pixels = original.reshape(height, width, channels).copy()
+            rgb = pixels[..., :3].astype(np.float32)
+            green_mask = (rgb[..., 1] > rgb[..., 0] + 2.0) & (rgb[..., 1] > rgb[..., 2] + 2.0)
+            coverage = np.sum((rgb - white) * green_axis, axis=-1) / green_axis_norm
+            coverage = np.clip(coverage, 0.0, 1.0)
+            recolored = rgb + coverage[..., None] * (target - source_green)
+            pixels[..., :3][green_mask] = np.clip(
+                recolored[green_mask], 0.0, 255.0
+            ).astype(np.uint8)
+            raw_model.tex_data[address:address + size] = pixels.reshape(-1)
+            self._upload_texture_if_rendering(texture_id)
+
+    def _upload_texture_if_rendering(self, texture_id: int) -> None:
+        """Refresh an existing GPU texture after changing model.tex_data."""
+        context = getattr(self.sim, "_render_context_offscreen", None)
+        if context is None:
+            return
+        context.gl_ctx.make_current()
+        mujoco.mjr_uploadTexture(self.sim.model._model, context.con, int(texture_id))
 
     def _set_body_color(self, name: str, rgba: tuple[float, float, float, float]) -> None:
         model = self.sim.model
@@ -349,7 +451,14 @@ class WR07MatchMilkCartonToColoredSugarPlate(Kitchen):
             target_color_matches=state.target_color_matches,
             protocol_violation=state.protocol_violation,
             domain_success=report.success,
-            details={**report.checks(), "target_slot": target_slot, "target_color": self.target_plate_color_by_slot[target_slot], "current_item_position": self._obj_pos(ITEM_ID).tolist()},
+            details={
+                **report.checks(),
+                "target_slot": target_slot,
+                "target_color": self.target_plate_color_by_slot[target_slot],
+                "carton_type": getattr(self, "carton_type", "milk_1"),
+                "carton_material": getattr(self, "carton_material", "satin"),
+                "current_item_position": self._obj_pos(ITEM_ID).tolist(),
+            },
         )
 
     def update_state(self) -> None:
@@ -375,6 +484,9 @@ class WR07MatchMilkCartonToColoredSugarPlate(Kitchen):
         meta["lang"], meta["initial_prompt"] = prompt.policy_prompt, prompt.initial_prompt
         meta.setdefault("refs", {}).update({
             "item_ids": list(self.item_names), "item_labels": ITEM_LABELS,
+            "carton_type": self.carton_type,
+            "carton_asset": self.carton_asset,
+            "carton_material": self.carton_material,
             "source_plate_colors": dict(self.source_plate_color_by_slot),
             "target_plate_colors": dict(self.target_plate_color_by_slot),
         })

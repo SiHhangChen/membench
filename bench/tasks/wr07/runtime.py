@@ -32,6 +32,9 @@ def _environment(config: Any, scene: Any, plan: Any, resources: Mapping[str, Any
         "source_item_yaw_by_item": dict(plan.source_item_yaw_by_item),
         "target_item_offset_xy_by_item": dict(plan.target_item_offset_xy_by_item),
         "target_item_yaw_by_item": dict(plan.target_item_yaw_by_item),
+        "carton_type": str(plan.carton_type),
+        "carton_asset": str(plan.carton_asset),
+        "carton_material": str(plan.carton_material),
         "item_sample_radius_m": float(plan.item_sample_radius_m),
         "plate_threshold": float(config.semantics.get("plate_threshold", 0.16)),
     }
@@ -64,7 +67,19 @@ _ADAPTER = TaskRuntimeAdapter(
     close=default_close,
     report_stage_profile_id=REPORT_STAGE_PROFILE_ID,
     report_stages=report_stages_for_runtime,
-    release_facts=lambda config, episode, resources, options: {"task_revision": TASK_REVISION, "task_id": episode.task_id},
+    release_facts=lambda config, episode, resources, options: {
+        "task_revision": TASK_REVISION,
+        "task_id": episode.task_id,
+        "carton_type": str(episode.facts["carton_type"]),
+        "carton_asset": str(episode.facts["carton_asset"]),
+        "carton_material": str(episode.facts["carton_material"]),
+        "carton_type_candidates": list(episode.facts["carton_type_candidates"]),
+        "carton_material_candidates": list(episode.facts["carton_material_candidates"]),
+        "carton_combination_count": int(
+            len(episode.facts["carton_type_candidates"])
+            * len(episode.facts["carton_material_candidates"])
+        ),
+    },
     expert_runtime=build_operation_handlers,
 )
 TASK_RUNTIME_API = _ADAPTER.api()

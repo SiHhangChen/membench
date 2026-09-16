@@ -321,8 +321,15 @@ class StationPoseSampler:
                 )
             count = int(self._circle_counts.get(station_id, 0))
             self._circle_counts[station_id] = count + 1
-            draw_seed = int(self.selector.seed) + count
             station_salt = int(zlib.crc32(station_id.encode("utf-8")))
+            # Derive each episode/station/draw independently.  Using
+            # ``episode_seed + count`` would make (seed=s, draw=1) collide
+            # with (seed=s+1, draw=0).
+            draw_seed = int(
+                np.random.SeedSequence(
+                    [int(self.selector.seed), station_salt & 0xFFFFFFFF, count]
+                ).generate_state(1, dtype=np.uint32)[0]
+            )
             sampled = sample_uniform_disk(
                 center[:2],
                 radius,

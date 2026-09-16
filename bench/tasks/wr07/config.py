@@ -68,7 +68,7 @@ def resolve_action_config(*, config: TaskConfig) -> ActionConfig:
 
 def resolve_task_options(task_options: Mapping[str, Any] | None) -> dict[str, Any]:
     if task_options:
-        raise ValueError("WR-07 v8 has no task options; all episode randomness is seed-owned")
+        raise ValueError("WR-07 v9 has no task options; all episode randomness is seed-owned")
     return {}
 
 def resolve_run_context(*, split: str, variant: str, execute: bool, extra_metadata: Mapping[str, Any] | None = None) -> RunContext:
@@ -76,12 +76,21 @@ def resolve_run_context(*, split: str, variant: str, execute: bool, extra_metada
         raise ValueError("WR-07 variant must be 'memory' or 'oracle_reveal'")
     return RunContext(str(split), str(variant), bool(execute), dict(extra_metadata or {}))
 
-def resolve_robot_base_config(*, mode: str | RobotBaseMode = RobotBaseMode.PRESERVE_RESET_POSE, xy: Sequence[float] | None = None, yaw: float | None = None) -> RobotBaseConfig:
+def resolve_robot_base_config(*, mode: str | RobotBaseMode = RobotBaseMode.PRESERVE_RESET_POSE, xy: Sequence[float] | None = None, yaw: float | None = None, radius_m: float | None = None) -> RobotBaseConfig:
     raw = mode.value if isinstance(mode, RobotBaseMode) else str(mode).strip().lower()
     try:
         resolved = RobotBaseMode(raw)
     except ValueError as exc:
         raise ValueError(f"unsupported WR-07 robot-base mode: {raw!r}") from exc
+    if resolved is RobotBaseMode.RESET_CIRCLE:
+        if xy is not None or yaw is not None:
+            raise ValueError("reset_circle uses the reset pose; xy and yaw are not allowed")
+        radius = float(0.05 if radius_m is None else radius_m)
+        if not isfinite(radius) or radius < 0.0:
+            raise ValueError("reset_circle radius_m must be finite and non-negative")
+        return RobotBaseConfig(resolved, radius_m=radius)
+    if radius_m is not None:
+        raise ValueError("radius_m is only supported by reset_circle")
     if resolved is RobotBaseMode.PRESERVE_RESET_POSE:
         if xy is not None or yaw is not None:
             raise ValueError("preserve_reset_pose does not accept xy or yaw")
