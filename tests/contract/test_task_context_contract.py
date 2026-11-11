@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
     [
         "TM01", "TM02", "TM03", "TM04", "TS01", "TS02", "TS03", "TS04",
         "WA-01", "WA-02", "WA-03", "WA-04", "WA-05", "WR-01", "WR-02", "WR-03", "WR-04",
-        "WR-05", "WR-06", "WR-07", "WR-08", "WX-01", "WX-02",
+        "WR-05", "WR-06", "WR-07", "WR-08", "WR-11", "WX-01", "WX-02",
     ],
 )
 def test_all_plugins_expose_canonical_runtime_and_expert_apis(task_id: str) -> None:
@@ -55,6 +55,7 @@ def test_all_plugins_expose_canonical_runtime_and_expert_apis(task_id: str) -> N
         ("wr06_v1.yaml", 3200),
         ("wr07_v1.yaml", 1000),
         ("wr08_v1.yaml", 2000),
+        ("wr11_v3.yaml", 3600),
         ("wx01_v1.yaml", 3200),
         ("wx02_v1.yaml", 5200),
     ],

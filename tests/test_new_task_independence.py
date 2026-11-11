@@ -30,6 +30,7 @@ TASK_NAMES = (
     "WR06",
     "WR07",
     "WR08",
+    "WR11",
     "WX01",
     "WX02",
 )
@@ -55,6 +56,7 @@ EXPECTED_TASK_IDS = {
     "WR-06",
     "WR-07",
     "WR-08",
+    "WR-11",
     "WX-01",
     "WX-02",
 }

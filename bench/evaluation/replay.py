@@ -7,14 +7,15 @@ videos, and result artifacts remain owned by ``RolloutRunner``.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-import json
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from bench.core.identity import canonical_hash
 from bench.evaluation.action import validate_action_chunk
 from bench.evaluation.artifacts import ArtifactWriter
 from bench.evaluation.canonical_adapter import CanonicalEvaluationAdapter
@@ -36,11 +37,28 @@ from bench.runtime.data_contract import (
 from bench.tasks import TaskCatalog, resolve_builtin_task_plugin
 from bench.tasks.contracts import EpisodeRequest, ResolvedEpisode
 
-
 ROOT = Path(__file__).resolve().parents[2]
 RUN_REPLAY_MODE = "saved_actions_evaluation_replay"
 DATASET_REPLAY_MODE = "recorded_actions_evaluation_replay"
 REPLAY_PROFILE = "membench-action-replay-v1"
+
+
+def _wr11_recording_prompt_identity_matches(episode: ResolvedEpisode, expected: str | None) -> bool:
+    """Accept only the known WR11 wording revision with every other input identical."""
+    if episode.task_id != "WR-11" or expected is None:
+        return False
+    from bench.tasks.wr11.prompts import PROMPT
+
+    if episode.public.get("prompt") != PROMPT:
+        return False
+    payload = episode.identity_payload()
+    payload["public"]["prompt"] = (
+        "Observe the sample milk carton on the dining island and remember its packaging. "
+        "Move sideways to the stock area at the other end of the island, pick the carton with the same "
+        "packaging, and bring it back to the empty tray beside the sample. "
+        "Choose correctly on your first pickup. Leave the sample in place."
+    )
+    return canonical_hash(payload) == expected
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,13 +116,12 @@ class ReplayPolicyClient:
             raise ValueError(f"reset({episode_id!r}) must be called before infer")
         if int(step) != self._cursor:
             raise ValueError(
-                f"replay action cursor mismatch: rollout step={step}, "
-                f"cursor={self._cursor}"
+                f"replay action cursor mismatch: rollout step={step}, cursor={self._cursor}"
             )
         if self._cursor >= len(self.actions):
             raise RuntimeError("recorded action stream exhausted")
         stop = min(len(self.actions), self._cursor + self.chunk_size)
-        chunk = np.ascontiguousarray(self.actions[self._cursor:stop])
+        chunk = np.ascontiguousarray(self.actions[self._cursor : stop])
         self._cursor = stop
         self._calls += 1
         return InferenceResponse(
@@ -128,6 +145,7 @@ class ReplayEvaluationAdapter(CanonicalEvaluationAdapter):
         self.replay = replay
         self.require_identity = bool(require_identity)
         self._identity_matches: bool | None = None
+        self._prompt_revision_matches = False
 
     def _resolve_episode(
         self,
@@ -142,7 +160,15 @@ class ReplayEvaluationAdapter(CanonicalEvaluationAdapter):
         episode = TaskCatalog.resolve(self.replay.request)
         expected = self.replay.expected_identity
         self._identity_matches = None if expected is None else expected == episode.identity
-        if self.require_identity and self._identity_matches is False:
+        self._prompt_revision_matches = (
+            self._identity_matches is False
+            and _wr11_recording_prompt_identity_matches(episode, expected)
+        )
+        if (
+            self.require_identity
+            and self._identity_matches is False
+            and not self._prompt_revision_matches
+        ):
             raise ValueError(
                 f"episode identity mismatch for seed={seed}: "
                 f"recorded={expected} current={episode.identity}"
@@ -165,10 +191,9 @@ class ReplayEvaluationAdapter(CanonicalEvaluationAdapter):
             **dict(self.replay.source),
             "profile": REPLAY_PROFILE,
             "expected_episode_identity": self.replay.expected_identity,
-            "current_episode_identity": runtime.result_metadata[
-                "resolved_episode"
-            ].get("identity"),
+            "current_episode_identity": runtime.result_metadata["resolved_episode"].get("identity"),
             "episode_identity_matches": self._identity_matches,
+            "wr11_prompt_revision_identity_matches": self._prompt_revision_matches,
             "source_action_steps": int(len(self.replay.actions)),
         }
         return runtime
@@ -300,7 +325,13 @@ def canonical_task_id(value: str) -> str:
 
 def task_suite_path(task_id: str) -> Path:
     name = canonical_task_id(task_id).replace("-", "").lower()
-    return ROOT / "configs" / "eval" / "suites" / f"{name}_v1.yaml"
+    directory = ROOT / "configs" / "eval" / "suites"
+    candidates = [
+        (int(version), path)
+        for path in directory.glob(f"{name}_v*.yaml")
+        if (version := path.stem.removeprefix(f"{name}_v")).isdigit()
+    ]
+    return max(candidates)[1] if candidates else directory / f"{name}_v1.yaml"
 
 
 def load_source_suite(manifest: Mapping[str, Any], task_id: str) -> EvalSuiteConfig:
@@ -316,9 +347,7 @@ def load_source_suite(manifest: Mapping[str, Any], task_id: str) -> EvalSuiteCon
         if candidate.is_file():
             suite = load_eval_suite(candidate)
             if canonical_task_id(suite.task_id) != canonical_task_id(task_id):
-                raise ValueError(
-                    f"suite task {suite.task_id} does not match replay task {task_id}"
-                )
+                raise ValueError(f"suite task {suite.task_id} does not match replay task {task_id}")
             return suite
     raise FileNotFoundError("could not resolve source or canonical evaluation suite")
 
@@ -335,18 +364,13 @@ def request_from_metadata(
     resolved_value = metadata.get("resolved_episode", {})
     resolved = dict(resolved_value) if isinstance(resolved_value, Mapping) else {}
     resolved_task = resolved.get("task_id")
-    if (
-        resolved_task
-        and canonical_task_id(str(resolved_task)) != canonical_task_id(task_id)
-    ):
+    if resolved_task and canonical_task_id(str(resolved_task)) != canonical_task_id(task_id):
         raise ValueError(
             f"recorded task {resolved_task!r} does not match requested task {task_id!r}"
         )
     resolved_seed = resolved.get("seed")
     if resolved_seed is not None and int(resolved_seed) != int(seed):
-        raise ValueError(
-            f"recorded seed {resolved_seed} does not match source seed {seed}"
-        )
+        raise ValueError(f"recorded seed {resolved_seed} does not match source seed {seed}")
     options = resolved.get("options", defaults.options)
     if not isinstance(options, Mapping):
         raise ValueError("resolved episode options must be a mapping")
@@ -355,9 +379,7 @@ def request_from_metadata(
         seed=int(seed),
         variant=str(resolved.get("variant", metadata.get("variant", defaults.variant))),
         split=str(resolved.get("split", metadata.get("split", defaults.split))),
-        env_split=str(
-            resolved.get("env_split", metadata.get("env_split", defaults.env_split))
-        ),
+        env_split=str(resolved.get("env_split", metadata.get("env_split", defaults.env_split))),
         options=dict(options),
         task_config_file=(
             task_config_file
@@ -388,9 +410,7 @@ def suite_request_defaults(suite: EvalSuiteConfig, seed: int) -> EpisodeRequest:
         env_split=suite.env_split,
         options=dict(options),
         task_config_file=_optional_path(raw.get("task_config_file")),
-        observation_profile_file=_optional_path(
-            raw.get("observation_profile_file")
-        ),
+        observation_profile_file=_optional_path(raw.get("observation_profile_file")),
         allow_partial_calibration=False,
     )
 
@@ -464,8 +484,7 @@ def discover_recorded_episodes(
             "source_success": status == "success",
             "manifest_selected": True,
             "episode_identity": (
-                manifest_item.get("episode_identity")
-                or existing.get("episode_identity")
+                manifest_item.get("episode_identity") or existing.get("episode_identity")
             ),
         }
     by_seed: dict[int, list[dict[str, Any]]] = {}
@@ -538,12 +557,7 @@ def _manifest_episode_dir(
         path = Path(str(value)).expanduser()
         candidates.append(path if path.is_absolute() else dataset_root / path)
     branch = "train" if status == "success" else "debug_failed"
-    candidates.append(
-        dataset_root
-        / branch
-        / task_id
-        / f"seed_{seed:06d}_attempt_{attempt:02d}"
-    )
+    candidates.append(dataset_root / branch / task_id / f"seed_{seed:06d}_attempt_{attempt:02d}")
     for candidate in candidates:
         resolved = candidate.resolve()
         if (resolved / "trajectory.h5").is_file():

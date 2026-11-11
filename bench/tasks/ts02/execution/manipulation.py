@@ -588,8 +588,10 @@ def _compact_gripper(summary: Mapping[str, Any] | None) -> dict[str, Any] | None
 
 
 def _stage_executed(summary: Mapping[str, Any]) -> bool:
-    return bool((summary.get("plan") or {}).get("status") == "Success") and bool(
-        summary.get("execution")
+    return (
+        bool(summary.get("pass", False))
+        and (summary.get("plan") or {}).get("status") == "Success"
+        and bool(summary.get("execution"))
     )
 
 

@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 TASK_IDS = (
     "TM01", "TM02", "TM03", "TM04", "TS01", "TS02", "TS03", "TS04",
     "WA-01", "WA-02", "WA-03", "WA-04", "WA-05", "WR-01", "WR-02", "WR-03", "WR-04",
-    "WR-05", "WR-06", "WR-07", "WR-08", "WX-01", "WX-02",
+    "WR-05", "WR-06", "WR-07", "WR-08", "WR-11", "WX-01", "WX-02",
 )
 
 
@@ -68,4 +68,4 @@ finally:
     assert result["missing_cameras"] == []
     assert result["episode_identity"].startswith("sha256:")
     assert result["prompt"].strip()
-    assert result["has_targets"] is (task_id in {"WR-02", "WR-04", "WR-05", "WR-06", "WR-07", "WR-08", "WX-01", "WX-02"})
+    assert result["has_targets"] is (task_id in {"WR-02", "WR-04", "WR-05", "WR-06", "WR-07", "WR-08", "WR-11", "WX-01", "WX-02"})

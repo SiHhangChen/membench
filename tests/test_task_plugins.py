@@ -49,13 +49,14 @@ EXPECTED_TASK_IDS = {
     "WR-06",
     "WR-07",
     "WR-08",
+    "WR-11",
     "WX-01",
     "WX-02",
 }
 
 
 def test_builtin_descriptor_table_is_complete_and_self_contained() -> None:
-    assert len(BUILTIN_TASK_PLUGINS) == len(EXPECTED_TASK_IDS) == 23
+    assert len(BUILTIN_TASK_PLUGINS) == len(EXPECTED_TASK_IDS) == 24
     assert {plugin.canonical_id for plugin in BUILTIN_TASK_PLUGINS} == EXPECTED_TASK_IDS
 
     for plugin in BUILTIN_TASK_PLUGINS:

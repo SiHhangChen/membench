@@ -1,0 +1,3 @@
+# Reserve the stock counter for the three candidates.
+knife_block:
+  enable: false

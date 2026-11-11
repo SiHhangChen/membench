@@ -6,6 +6,14 @@ when the cube is found, and then presses the spring-loaded completion button
 exactly once per inspected drawer. The target location and expert search order
 are deterministically sampled from separate seed streams.
 
+After every expert button press, including the last, the gripper retreats above
+the button and the arm returns to its regular pose with the gripper open before
+the next press or the end of the plan.
+
+Physical drawer operations require every executed prehook, hook, pull and
+push stage to pass. A successful plan or an opened drawer cannot override
+a failed arm execution.
+
 Version 1.1.0 adds independent seeded drawer variation while keeping layout,
 target appearance, prompt, handle friction and all other dynamics fixed:
 

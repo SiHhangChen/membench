@@ -24,7 +24,7 @@ def press_completion_button_physically(
     press_depth_threshold: float,
     require_physical_button_motion: bool = True,
 ) -> dict[str, Any]:
-    """Approach, depress, hold, and retreat from the live button plunger."""
+    """Approach, depress, hold, retreat, and return the arm to its regular pose."""
 
     if not bool(getattr(controller.runtime_config, "execute", False)):
         return {
@@ -133,6 +133,17 @@ def press_completion_button_physically(
             if _gripper_command_pass(hold, required_steps=int(hold_steps))
             else _skipped("ts02_completion_button_retreat", "button_hold_failed")
         )
+        arm_return = (
+            controller.return_arm_to_regular_pose(
+                stage="ts02_post_button_return_to_regular_pose",
+                gripper_action=-1.0,
+                post_step_callback=post_step,
+            )
+            if _stage_executed(retreat)
+            else _skipped(
+                "ts02_post_button_return_to_regular_pose", "button_retreat_failed"
+            )
+        )
         max_depth = max(
             [initial_depth, depth_after_press, depth_after_hold]
             + [float(item["button_press_depth_m"]) for item in trace]
@@ -148,6 +159,7 @@ def press_completion_button_physically(
             ),
             "physical_button_motion": physical_motion,
             "retreat_executed": _stage_executed(retreat),
+            "arm_returned": _stage_executed(arm_return),
         }
         if not bool(require_physical_button_motion):
             checks["physical_button_motion"] = True
@@ -175,6 +187,7 @@ def press_completion_button_physically(
                 "press": _compact(press),
                 "hold": _compact(hold),
                 "retreat": _compact(retreat),
+                "arm_return": _compact(arm_return),
             },
             "checks": checks,
             "pass": passed,

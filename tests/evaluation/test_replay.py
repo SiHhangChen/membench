@@ -10,16 +10,24 @@ from bench.evaluation.replay import (
     discover_recorded_episodes,
     parse_seed_spec,
     replay_policy_contract,
+    task_suite_path,
 )
 
 
+def test_default_replay_suite_uses_latest_numeric_version(tmp_path, monkeypatch) -> None:
+    from bench.evaluation import replay
+
+    monkeypatch.setattr(replay, "ROOT", tmp_path)
+    suites = tmp_path / "configs/eval/suites"
+    suites.mkdir(parents=True)
+    for name in ("wr06_v1.yaml", "wr06_v2.yaml", "wr06_v10.yaml", "wr06_v99_debug.yaml"):
+        (suites / name).touch()
+    assert task_suite_path("WR06") == suites / "wr06_v10.yaml"
+    assert task_suite_path("WR-05") == suites / "wr05_v1.yaml"
+
+
 def _episode(root: Path, branch: str, seed: int, attempt: int = 0) -> Path:
-    path = (
-        root
-        / branch
-        / "WR-06"
-        / f"seed_{seed:06d}_attempt_{attempt:02d}"
-    )
+    path = root / branch / "WR-06" / f"seed_{seed:06d}_attempt_{attempt:02d}"
     path.mkdir(parents=True)
     (path / "trajectory.h5").touch()
     return path
@@ -137,3 +145,32 @@ def test_replay_policy_returns_recorded_actions_without_skips() -> None:
     ]
 
     np.testing.assert_array_equal(np.concatenate(chunks), actions)
+
+
+def test_wr11_prompt_revision_preserves_strict_scene_and_seed_identity() -> None:
+    from dataclasses import replace
+
+    from bench.core.identity import canonical_hash
+    from bench.evaluation.replay import _wr11_recording_prompt_identity_matches
+    from bench.tasks import TaskCatalog
+    from bench.tasks.contracts import EpisodeRequest
+
+    episode = TaskCatalog.resolve(
+        EpisodeRequest(task_id="WR-11", seed=36, allow_partial_calibration=False)
+    )
+    payload = episode.identity_payload()
+    payload["public"]["prompt"] = (
+        "Observe the sample milk carton on the dining island and remember its packaging. "
+        "Move sideways to the stock area at the other end of the island, pick the carton with the same "
+        "packaging, and bring it back to the empty tray beside the sample. "
+        "Choose correctly on your first pickup. Leave the sample in place."
+    )
+    recorded = canonical_hash(payload)
+    assert _wr11_recording_prompt_identity_matches(episode, recorded)
+    assert not _wr11_recording_prompt_identity_matches(replace(episode, seed=37), recorded)
+    assert not _wr11_recording_prompt_identity_matches(
+        replace(episode, resource_hash="changed"), recorded
+    )
+    assert not _wr11_recording_prompt_identity_matches(replace(episode, facts={}), recorded)
+    assert not _wr11_recording_prompt_identity_matches(replace(episode, task_id="WR-08"), recorded)
+    assert not _wr11_recording_prompt_identity_matches(episode, "incorrect")

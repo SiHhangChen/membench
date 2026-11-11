@@ -1,0 +1,56 @@
+{
+  "schema_version": "membench.task_sampling/v1",
+  "entries": {
+    "profile_id": "WR-11/sampling-v2",
+    "request": {
+      "distribution": "uniform_among_stock",
+      "packaging": [
+        "red",
+        "orange",
+        "yellow",
+        "green",
+        "cyan",
+        "blue",
+        "purple",
+        "black"
+      ]
+    },
+    "stock": {
+      "distribution": "uniform_ordered_without_replacement",
+      "count": 3
+    },
+    "objects": {
+      "ids": [
+        "stock_left",
+        "stock_center",
+        "stock_right",
+        "sample_carton"
+      ],
+      "xy_distribution": "uniform_area_disk",
+      "radius_m": 0.025,
+      "yaw_range_rad": [
+        -3.141592653589793,
+        3.141592653589793
+      ],
+      "independent_streams": true
+    },
+    "robot": {
+      "xy_distribution": "uniform_area_disk",
+      "station_ids": [
+        "sample_station",
+        "stock_station"
+      ],
+      "reuse_sample_station_for_return": true,
+      "independent_station_streams": true,
+      "heading": "fixed_shared",
+      "radius_source": "station_calibration"
+    },
+    "fixed": [
+      "layout",
+      "style",
+      "trays",
+      "carton_geometry",
+      "torso_height"
+    ]
+  }
+}

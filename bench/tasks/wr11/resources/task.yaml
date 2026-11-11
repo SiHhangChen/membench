@@ -1,0 +1,136 @@
+schema_version: 1
+task:
+  id: WR-11
+  display_name: Fetch a milk carton matching the remote sample
+  description: Observe the sample on the dining island, translate to its stock area,
+    select the matching carton on the first pickup, and deliver it beside the sample.
+  success_conditions:
+  - sample_observed
+  - stock_reached_without_sample_visible
+  - first_pick_matches_sample
+  - matching_carton_delivered
+  - sample_undisturbed
+scene:
+  env_name: WR11FetchMatchingMilkCarton
+  fixed_scene: true
+  layout_id: 33
+  style_id: 34
+  scene_seed: 0
+episode:
+  max_horizon: 3600
+initial_state:
+  robot_base:
+    mode: sample_station
+sensors:
+  cameras:
+  - robot0_agentview_left
+  - robot0_agentview_right
+  - robot0_eye_in_hand
+  wrist_rgb_camera: robot0_eye_in_hand
+  width: 224
+  height: 224
+  depth: false
+  has_renderer: false
+  has_offscreen_renderer: true
+  use_camera_observations: true
+resources:
+  planner_script: ../../../execution/planning/mplib_planner.py
+  stations: calibration/stations.json
+  fixture_overrides: scene/fixture_overrides.yaml
+  sampling_rules: sampling/regions.json
+navigation:
+  kinematic_base_navigation: false
+  base_action_frame: world
+  base_translation_action_sign: 1.0
+  base_tolerance: 0.08
+  base_yaw_tolerance: 0.12
+  base_max_steps: 2000
+  base_holding_drop_tolerance: 0.1
+  base_profile_v_max: 0.5
+  base_profile_a_max: 1.0
+  base_profile_a_dec: 1.1
+  base_profile_v_min: 0.15
+  base_profile_dock_v_max: 0.22
+  base_profile_dock_v_min: 0.1
+  base_profile_w_max: 0.6
+  base_profile_alpha_max: 1.1
+  base_profile_alpha_dec: 1.0
+  base_profile_w_min: 0.08
+  station_nav_use_docking: false
+  use_station_base_poses: true
+  manual_base_path_enabled: false
+  use_station_astar_paths: false
+manipulation:
+  pick_place:
+    orientation_mode: object-y-topdown
+    pregrasp_height: 0.15
+    grasp_clearance: -0.04
+    lift_height: 0.12
+    place_height: 0.05
+    retreat_height: 0.18
+  planner:
+    conda_env: membench
+    subprocess_timeout_s: 60.0
+    planning_time: 5.0
+    time_step: 0.1
+    qpos_step: 0.02
+    rrt_range: 0.1
+    nearest_ik_samples: 64
+    nearest_ik_threshold: 0.01
+    nearest_ik_max_joint_delta: 2.15
+  runtime:
+    max_joint_step: 0.025
+    settle_steps: 8
+    position_threshold: 0.02
+    orientation_threshold_deg: 15.0
+    qpos_threshold: 0.05
+    open_steps: 4
+    close_steps: 20
+    release_steps: 20
+    release_settle_steps: 8
+  static_scene:
+    enabled: false
+operations:
+  source_pick:
+    orientation_mode: object-y-topdown
+    grasp_yaw_offsets_deg:
+    - 0.0
+    - 90.0
+    - 180.0
+    - 270.0
+    pregrasp_height: 0.06
+    pregrasp_settle_steps: 20
+    allow_pregrasp_near_miss: true
+    pregrasp_near_miss_max_position_error: 0.08
+    lift_height: 0.12
+    post_close_hold_steps: 12
+  target_place:
+    placement_reference: bbox_bottom_center
+    placement_object_upright: true
+    placement_yaw_offsets_deg:
+    - 0.0
+    - 90.0
+    - 180.0
+    - 270.0
+    place_height: 0.02
+    release_steps: 20
+    release_settle_steps: 8
+    allow_place_near_miss: true
+  return_arm_empty:
+    gripper_action: -1.0
+  return_arm_holding:
+    gripper_action: 1.0
+    settle_steps: 16
+    qpos_threshold: 0.06
+  handlers:
+    accessible_place_dry_run_only: true
+semantics:
+  observation_dwell_steps: 3
+  placement_dwell_steps: 3
+  minimum_lift_m: 0.02
+  sample_motion_tolerance_m: 0.06
+recording:
+  record_depth: false
+  depth_dtype: uint16
+  depth_scale: 0.001
+  action_schema: membench.pandaomron_hybrid13.v2

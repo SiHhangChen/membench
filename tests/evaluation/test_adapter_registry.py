@@ -10,6 +10,7 @@ from bench.evaluation.adapter import EpisodeRuntime, get_adapter, preflight_adap
 from bench.evaluation.canonical_adapter import CanonicalEvaluationAdapter
 from bench.evaluation.observation import build_canonical_observation
 from bench.evaluation.report_profiles import REPORT_STAGE_PROFILES
+from bench.evaluation.replay import task_suite_path
 from bench.evaluation.suite import (
     ArtifactConfig,
     EvalSuiteConfig,
@@ -33,7 +34,7 @@ _BENCHMARK_TASK_IDS = {profile.task_id for profile in REPORT_STAGE_PROFILES}
 def _suite_path(task_id: str) -> Path:
     name = task_id.lower().replace("-", "")
     if task_id in _BENCHMARK_TASK_IDS:
-        return Path("configs/eval/suites") / f"{name}_v1.yaml"
+        return task_suite_path(task_id)
     return Path("configs/eval/legacy_suites") / f"{name}_smoke_v1.yaml"
 
 
@@ -88,7 +89,7 @@ def test_all_builtin_tasks_resolve_to_an_evaluation_adapter() -> None:
     [
         "TM01", "TM02", "TM04", "TS01", "TS02", "TS03", "TS04",
         "WA-01", "WA-02", "WA-03", "WA-04", "WA-05", "WR-01", "WR-02", "WR-03", "WR-04",
-        "WR-05", "WR-06", "WR-07", "WR-08", "WX-01", "WX-02",
+        "WR-05", "WR-06", "WR-07", "WR-08", "WR-11", "WX-01", "WX-02",
     ],
 )
 def test_all_calibrated_preflights_consume_the_versioned_observation_profile(

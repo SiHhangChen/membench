@@ -254,6 +254,10 @@ def test_frozen_profile_catalog_covers_all_report_tasks() -> None:
             ),
             frozenset(),
         ),
+        "WR-11": (
+            ("sample_observed", "stock_reached", "first_pick_correct", "item_delivered", "success"),
+            frozenset(),
+        ),
         "WX-01": (
             ("wipe_completed", "cleaning_tool_released", "success"),
             frozenset(),

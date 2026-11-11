@@ -1,0 +1,28 @@
+{
+  "schema_version": "membench.task_scene/v1",
+  "entries": {
+    "sample_tray_xy": [
+      0.85,
+      -2.15
+    ],
+    "delivery_tray_xy": [
+      1.22,
+      -2.15
+    ],
+    "stock_tray_xys": [
+      [
+        2.9,
+        -2.15
+      ],
+      [
+        3.3,
+        -2.15
+      ],
+      [
+        3.7,
+        -2.15
+      ]
+    ],
+    "height_reference": "fixture top minus tray bottom offset"
+  }
+}

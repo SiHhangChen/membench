@@ -1,0 +1,4 @@
+schema_version: 1
+assets:
+  carton: objaverse/milk/milk_1/model.xml
+  tray: lightwheel/oven_tray/OvenTray001/model.xml

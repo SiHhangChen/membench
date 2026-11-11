@@ -214,6 +214,14 @@ WR08_REPORT_PROFILE = _profile(
     "success",
     version=3,
 )
+WR11_REPORT_PROFILE = _profile(
+    "WR-11",
+    "sample_observed",
+    "stock_reached",
+    "first_pick_correct",
+    "item_delivered",
+    "success",
+)
 WX01_REPORT_PROFILE = _profile(
     "WX-01",
     "wipe_completed",
@@ -253,6 +261,7 @@ REPORT_STAGE_PROFILES = (
     WR06_REPORT_PROFILE,
     WR07_REPORT_PROFILE,
     WR08_REPORT_PROFILE,
+    WR11_REPORT_PROFILE,
     WX01_REPORT_PROFILE,
     WX02_REPORT_PROFILE,
 )
@@ -314,6 +323,7 @@ __all__ = [
     "WR06_REPORT_PROFILE",
     "WR07_REPORT_PROFILE",
     "WR08_REPORT_PROFILE",
+    "WR11_REPORT_PROFILE",
     "WX01_REPORT_PROFILE",
     "WX02_REPORT_PROFILE",
     "get_report_stage_profile",

@@ -1,0 +1,10 @@
+{
+  "schema_version": "membench.task_navigation_stations/v1",
+  "entries": {
+    "calibration_file": "../calibration/stations.json",
+    "station_ids": [
+      "sample_station",
+      "stock_station"
+    ]
+  }
+}
