@@ -24,8 +24,8 @@
 # 可通过环境变量覆盖（保持默认即可复用）：
 #   CKPT_DIR      checkpoint 目录，默认 ckpts/pi05/.../45000
 #   CONFIG_NAME   OpenPI 配置名，默认 pi05_membench_wa01_lora
-#   SUITE         评测 suite，默认 configs/eval/suites/wa01_v1.yaml
-#   RUN_ID        评测运行 ID，默认 wa01-pi05-lora-45000
+#   SUITE         评测 suite，默认 configs/eval/suites/wa01_v2.yaml
+#   RUN_ID        评测运行 ID，默认 wa01-pi05-lora-45000-prefix-v2
 #   OUTPUT_ROOT   评测输出根目录，默认 outputs/eval
 #   SERVER_HOST   客户端连接的服务端地址，默认 127.0.0.1（同机）
 #   PORT          服务端端口，默认 8000
@@ -37,8 +37,15 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
 CKPT_DIR="${CKPT_DIR:-${ROOT}/ckpts/pi05/pi05_membench_wa01_lora/pi05_lora_membench_wa01/45000}"
 CONFIG_NAME="${CONFIG_NAME:-pi05_membench_wa01_lora}"
-SUITE="${SUITE:-configs/eval/suites/wa01_v1.yaml}"
-RUN_ID="${RUN_ID:-wa01-pi05-lora-45000}"
+# Stage diagnostics retain the legacy policy-controlled first stage.
+case "${1:-}" in
+    *stage*|prefixes|prefix-summary)
+        SUITE="${SUITE:-configs/eval/suites/wa01_v1.yaml}"
+        RUN_ID="${RUN_ID:-wa01-pi05-lora-45000}"
+        ;;
+esac
+SUITE="${SUITE:-configs/eval/suites/wa01_v2.yaml}"
+RUN_ID="${RUN_ID:-wa01-pi05-lora-45000-prefix-v2}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-outputs/eval}"
 SERVER_HOST="${SERVER_HOST:-127.0.0.1}"
 PORT="${PORT:-8000}"

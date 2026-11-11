@@ -237,7 +237,7 @@ python scripts/record_entrypoint.py \
   --dry-run
 
 python scripts/evaluate.py \
-  --suite configs/eval/suites/wa01_v1.yaml \
+  --suite configs/eval/suites/wa01_v2.yaml \
   --preflight-only
 ```
 
@@ -368,9 +368,11 @@ conda activate robocasa
 cd /path/to/membench
 PYTHONPATH=. python scripts/eval/run_remote.py \
   --endpoint ws://SERVER_IP:8000 \
-  --suite configs/eval/suites/wa01_v1.yaml \
+  --suite configs/eval/suites/wa01_v2.yaml \
   --preflight-only
 ```
+
+WA01 / WA05 正式评测 v2 使用一次固定专家前置段。运行前须生成对应 seeds 的动作文件；具体边界、生成命令与计分口径见[专家前置评测说明](docs/wa_expert_prefix_evaluation.md)。
 
 同机测试时把 `SERVER_IP` 换成 `127.0.0.1`。跨机器测试时开放 TCP 8000 端口，但不要把未鉴权服务直接暴露到公网。
 

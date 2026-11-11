@@ -19,6 +19,7 @@ if str(ROOT) not in sys.path:
 from bench.evaluation.adapter import get_adapter, preflight_adapter  # noqa: E402
 from bench.evaluation.artifacts import ArtifactWriter  # noqa: E402
 from bench.evaluation.client import RemotePolicyClient  # noqa: E402
+from bench.evaluation.prefix import evaluation_prefix_inventory  # noqa: E402
 from bench.evaluation.rollout import RolloutRunner  # noqa: E402
 from bench.evaluation.suite import load_eval_suite  # noqa: E402
 from bench.tasks import get_builtin_task_plugin, register_builtin_task_plugins  # noqa: E402
@@ -55,6 +56,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     suite = load_eval_suite(args.suite)
+    prefix_inventory = evaluation_prefix_inventory(suite)
     register_builtin_task_plugins()
     plugin = get_builtin_task_plugin(suite.task_id)
     adapter = get_adapter(suite.task_id)
@@ -78,6 +80,8 @@ def main(argv: list[str] | None = None) -> int:
             suite=suite,
             policy_contract=contract,
         )
+        if prefix_inventory is not None:
+            preflight = {**preflight, "expert_prefix_inventory": prefix_inventory}
         if args.preflight_only:
             print(
                 _json_dump(
@@ -160,6 +164,15 @@ def _run_manifest(
             "action_repeat": suite.rollout.action_repeat,
             "stop_on_success": suite.rollout.stop_on_success,
             "ignore_done": suite.rollout.ignore_done,
+            **(
+                {} if suite.expert_prefix is None else {
+                    "expert_prefix": {
+                        "profile": suite.expert_prefix.profile,
+                        "root": str(suite.expert_prefix.root),
+                        "inventory": preflight.get("expert_prefix_inventory"),
+                    }
+                }
+            ),
         },
         "artifacts": {
             "record_video": suite.artifacts.record_video,

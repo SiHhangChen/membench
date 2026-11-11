@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any
 
 from bench.runtime import TaskRuntimeAdapter, default_close
@@ -36,6 +37,7 @@ from bench.tasks.wa05.initialization import (
     apply_sampled_initial_object_regions,
 )
 from bench.tasks.wa05.prompts import resolve_prompt_spec
+from bench.tasks.wa05.evaluation_prefix import build_prefix, validate_prefix
 from bench.tasks.wa05.subtask_evaluation import build_subtask_scheduler
 
 
@@ -142,7 +144,10 @@ _ADAPTER = TaskRuntimeAdapter(
     expert_runtime=build_operation_handlers,
     subtask_scheduler=build_subtask_scheduler,
 )
-TASK_RUNTIME_API = _ADAPTER.api()
+TASK_RUNTIME_API = replace(
+    _ADAPTER.api(), build_evaluation_prefix=build_prefix,
+    validate_evaluation_prefix=validate_prefix,
+)
 build_descriptor = _ADAPTER.build_descriptor
 initialize_runtime = _ADAPTER.initialize_runtime
 check_success = _ADAPTER.check_success

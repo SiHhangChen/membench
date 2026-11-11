@@ -86,6 +86,12 @@ def main_rollout_stage_result(
         raise ValueError(
             f"main rollout task {episode.get('task_id')!r} does not match {task_id!r}"
         )
+    metadata = episode.get("episode_metadata")
+    if isinstance(metadata, Mapping) and metadata.get("expert_prefix") is not None:
+        raise ValueError(
+            "expert-controlled main rollout stages cannot be imported as policy stage scores; "
+            "use a legacy v1 rollout for stage diagnostics"
+        )
     status = str(episode.get("status"))
     if status not in {"success", "failure"}:
         raise ValueError(f"main rollout episode is not a completed test: status={status!r}")

@@ -46,6 +46,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pytorch-device")
     parser.add_argument("--api-key-env", default="MEMBENCH_POLICY_API_KEY")
     parser.add_argument("--inference-timeout-s", type=float, default=30.0)
+    parser.add_argument(
+        "--seed-by-episode",
+        action="store_true",
+        help="Reset Python/NumPy/Torch RNG from seed-<integer> in each episode ID.",
+    )
     return parser.parse_args()
 
 
@@ -64,6 +69,7 @@ def main() -> None:
         image_size=(args.image_size, args.image_size),
         state_schema=args.state_schema,
         pytorch_device=args.pytorch_device,
+        seed_by_episode=args.seed_by_episode,
         code_revision={"membench": _git_revision(ROOT), "policy_repo": _git_revision(ROOT / "policy" / "lerobot-0.6.1")},
     )
     logging.info("Model loaded")

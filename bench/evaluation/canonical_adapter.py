@@ -10,6 +10,11 @@ import numpy as np
 
 from bench.evaluation.adapter import EpisodeRuntime
 from bench.evaluation.observation import build_canonical_observation
+from bench.evaluation.prefix import (
+    EvaluationPrefix,
+    load_evaluation_prefix,
+    validate_prefix_configuration,
+)
 from bench.evaluation.suite import EvalSuiteConfig
 from bench.policy.protocol import CanonicalObservation, PolicyContract
 from bench.policy.protocol.errors import ErrorCode, ProtocolError
@@ -101,6 +106,15 @@ class CanonicalEvaluationAdapter:
             robot_state_extractor=runtime.metadata["robot_state_extractor"],
         )
 
+    def create_evaluation_prefix(self, runtime: EpisodeRuntime, suite: EvalSuiteConfig):
+        if suite.expert_prefix is None:
+            return None
+        api = self._runtime_api()
+        descriptor = runtime.metadata["descriptor"]
+        validate_prefix_configuration(api, descriptor, suite.expert_prefix)
+        artifact = load_evaluation_prefix(suite.expert_prefix, descriptor.episode)
+        return EvaluationPrefix(artifact, api.validate_evaluation_prefix, runtime)
+
     def artifact_frames(
         self,
         runtime: EpisodeRuntime,
@@ -152,6 +166,7 @@ class CanonicalEvaluationAdapter:
         episode = self._resolve_episode(seed=suite.seeds[0], suite=suite, options=options)
         self._validate_episode(episode, suite=suite, policy_contract=policy_contract)
         descriptor = self._runtime_api().build_descriptor(episode, True)
+        validate_prefix_configuration(self._runtime_api(), descriptor, suite.expert_prefix)
         scheduler_id = options.get("prompt_scheduler")
         if scheduler_id is not None:
             builder = getattr(self._runtime_api(), "build_subtask_scheduler", None)
@@ -182,6 +197,14 @@ class CanonicalEvaluationAdapter:
                 suite.rollout.max_steps, episode
             ),
             "prompt_scheduler": scheduler_id,
+            "expert_prefix": (
+                None if suite.expert_prefix is None else {
+                    "profile": suite.expert_prefix.profile,
+                    "root": str(suite.expert_prefix.root),
+                    "policy_observes_prefix": True,
+                    "budget": "policy_steps_after_handoff",
+                }
+            ),
         }
 
     def _resolve_episode(

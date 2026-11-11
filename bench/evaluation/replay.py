@@ -220,6 +220,7 @@ def run_action_replay(
         )
         replay_suite = replace(
             suite,
+            expert_prefix=None,  # Saved actions already include the expert prefix.
             seeds=(episode.seed,),
             rollout=replace(
                 suite.rollout,

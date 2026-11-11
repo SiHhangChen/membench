@@ -41,6 +41,12 @@ class TransportConfig:
 
 
 @dataclass(frozen=True)
+class ExpertPrefixConfig:
+    profile: str
+    root: Path
+
+
+@dataclass(frozen=True)
 class EvalSuiteConfig:
     suite_version: str
     task_id: str
@@ -52,10 +58,11 @@ class EvalSuiteConfig:
     task_options: Mapping[str, Any] = field(default_factory=dict)
     source_path: Path | None = None
     content_hash: str = ""
+    expert_prefix: ExpertPrefixConfig | None = None
 
 
 _SUITE_FIELDS = frozenset(
-    {"suite_version", "task", "seeds", "rollout", "artifacts", "transport"}
+    {"suite_version", "task", "seeds", "rollout", "artifacts", "transport", "expert_prefix"}
 )
 _TASK_FIELDS = frozenset({"id", "env_split", "options"})
 _ROLLOUT_FIELDS = frozenset(
@@ -84,6 +91,17 @@ def load_eval_suite(path: Path) -> EvalSuiteConfig:
     _reject_unknown_fields(artifacts, _ARTIFACT_FIELDS, "artifacts")
     _reject_unknown_fields(transport, _TRANSPORT_FIELDS, "transport")
     task_options = _mapping(task, "options", default={})
+    prefix = None
+    if "expert_prefix" in payload:
+        prefix_payload = _mapping(payload, "expert_prefix")
+        _reject_unknown_fields(prefix_payload, frozenset({"profile", "root"}), "expert_prefix")
+        prefix_root = Path(_string(prefix_payload, "root", context="expert_prefix")).expanduser()
+        if not prefix_root.is_absolute():
+            prefix_root = Path(__file__).resolve().parents[2] / prefix_root
+        prefix = ExpertPrefixConfig(
+            profile=_string(prefix_payload, "profile", context="expert_prefix"),
+            root=prefix_root.resolve(),
+        )
     video_cameras = _string_list(
         artifacts,
         "video_cameras",
@@ -161,6 +179,7 @@ def load_eval_suite(path: Path) -> EvalSuiteConfig:
         task_options=dict(task_options),
         source_path=source_path,
         content_hash=hash_eval_suite(payload),
+        expert_prefix=prefix,
     )
     suite = _resolve_task_horizon(suite)
     validate_eval_suite(suite)
@@ -171,6 +190,12 @@ def validate_eval_suite(suite: EvalSuiteConfig) -> None:
     _validate_non_empty_string(suite.suite_version, "suite_version")
     _validate_non_empty_string(suite.task_id, "task.id")
     _validate_non_empty_string(suite.env_split, "task.env_split")
+    if suite.expert_prefix is not None:
+        _validate_non_empty_string(suite.expert_prefix.profile, "expert_prefix.profile")
+        if suite.task_options.get("prompt_scheduler") is not None:
+            raise ValueError("expert_prefix requires the unchanged full-task prompt")
+        if suite.rollout.action_repeat != 1:
+            raise ValueError("expert_prefix requires action_repeat=1")
     if not suite.seeds:
         raise ValueError("seeds must be non-empty and unique")
     for seed in suite.seeds:

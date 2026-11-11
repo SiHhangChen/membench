@@ -4,6 +4,10 @@ This package directly owns WA-01's canonical episode, RoboCasa scene, semantics,
 
 Package layout version: `membench.task_package/v1`.
 
+正式评测 v2 由专家完成 `add_sugar`，之后一次性交给 policy 完成运杯和选择。
+专家期间 policy 持续接收观测，交接保留模型历史和完整指令。
+配置、生成固定动作和计分方式见[固定专家前置评测说明](../../../docs/wa_expert_prefix_evaluation.md)。
+
 ## Evaluation boundary
 
 - `environment.py` detects physical facts and shared task events. It does not

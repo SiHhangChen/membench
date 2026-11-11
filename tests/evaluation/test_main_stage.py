@@ -34,6 +34,15 @@ def _episode(*, seed: int = 1050, first_pass_step: int | None = 565) -> dict:
     }
 
 
+def test_expert_controlled_stages_cannot_be_imported_as_policy_scores():
+    episode = _episode()
+    episode["episode_metadata"] = {"expert_prefix": {"valid": True, "handoff_step": 733}}
+    with pytest.raises(ValueError, match="expert-controlled"):
+        main_rollout_stage_result(
+            episode, task_id="WA-05", target_stage="cup_filled", model_step_budget=1200,
+        )
+
+
 def test_main_rollout_stage_result_applies_stage_budget() -> None:
     within = main_rollout_stage_result(
         _episode(first_pass_step=565),

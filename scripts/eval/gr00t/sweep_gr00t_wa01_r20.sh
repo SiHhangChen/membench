@@ -8,6 +8,8 @@ EVAL_SCRIPT="${ROOT}/scripts/eval/gr00t/eval_gr00t_wa01.sh"
 GPU="${GPU:-0}"
 RENDER_GPU="${RENDER_GPU:-${GPU}}"
 PORT="${PORT:-57101}"
+# This campaign includes first-stage policy diagnostics and retains protocol v1.
+export SUITE="${SUITE:-configs/eval/legacy_suites/wa01_gr00t_r20_v1.yaml}"
 
 if [[ "$#" -gt 0 ]]; then
     CHECKPOINTS=("${@}")
@@ -37,7 +39,7 @@ for step in "${CHECKPOINTS[@]}"; do
         fi
         sleep 10
     done
-    "${EVAL_SCRIPT}" eval
+    RUN_ID="${RUN_ID:-wa01-gr00t-${step}-50seeds-r20}" "${EVAL_SCRIPT}" eval
     "${EVAL_SCRIPT}" stage-eval
     "${EVAL_SCRIPT}" stage-summary
     "${EVAL_SCRIPT}" stop

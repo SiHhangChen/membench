@@ -21,8 +21,15 @@ CONFIG_NAME="${CONFIG_NAME:-pi05_membench_wa05_lora}"
 PORT="${PORT:-55005}"
 GPU="${GPU:-2}"
 RENDER_GPU="${RENDER_GPU:-${GPU}}"
-SUITE="${SUITE:-configs/eval/legacy_suites/wa05_pi05_r20_v1.yaml}"
-RUN_ID="${RUN_ID:-wa05-pi05-${CKPT_STEP}-50seeds-r20}"
+# Stage diagnostics retain the legacy policy-controlled first stage.
+case "${1:-}" in
+    *stage*|prefixes|prefix-summary)
+        SUITE="${SUITE:-configs/eval/legacy_suites/wa05_pi05_r20_v1.yaml}"
+        RUN_ID="${RUN_ID:-wa05-pi05-${CKPT_STEP}-50seeds-r20}"
+        ;;
+esac
+SUITE="${SUITE:-configs/eval/legacy_suites/wa05_pi05_r20_prefix_v2.yaml}"
+RUN_ID="${RUN_ID:-wa05-pi05-${CKPT_STEP}-50seeds-r20-prefix-v2}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-outputs/eval}"
 SERVER_HOST="${SERVER_HOST:-127.0.0.1}"
 SERVER_INFERENCE_TIMEOUT_S="${SERVER_INFERENCE_TIMEOUT_S:-300}"

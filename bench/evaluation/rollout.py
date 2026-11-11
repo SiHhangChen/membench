@@ -90,6 +90,9 @@ class RolloutRunner:
         result: EpisodeResult | None = None
         interrupted: KeyboardInterrupt | None = None
         scheduler: Any | None = None
+        prefix: Any | None = None
+        prefix_finished = False
+        policy_steps = 0
         try:
             runtime = adapter.create_episode(
                 seed=seed,
@@ -97,6 +100,13 @@ class RolloutRunner:
                 suite=self.suite,
             )
             episode_id = runtime.episode_id
+            prefix_factory = getattr(adapter, "create_evaluation_prefix", None)
+            if self.suite.expert_prefix is not None:
+                if not callable(prefix_factory):
+                    raise ValueError("adapter does not support configured expert_prefix")
+                prefix = prefix_factory(runtime, self.suite)
+                if prefix is None:
+                    raise ValueError("adapter did not provide the configured expert_prefix")
             scheduler_factory = getattr(adapter, "create_subtask_scheduler", None)
             if callable(scheduler_factory):
                 scheduler = scheduler_factory(runtime, self.suite)
@@ -110,7 +120,12 @@ class RolloutRunner:
                 expected_dim=self.client.contract.action.dim,
                 action_schema=self.client.contract.action.schema,
             )
-            while env_steps < self.suite.rollout.max_steps:
+            while policy_steps < self.suite.rollout.max_steps:
+                if prefix is not None and prefix.complete and not prefix_finished:
+                    prefix.handoff(env_steps)
+                    prefix_finished = True
+                    queue.clear()
+                expert_control = prefix is not None and not prefix_finished
                 if len(queue) == 0:
                     observation = adapter.build_observation(runtime)
                     start = time.monotonic()
@@ -141,14 +156,20 @@ class RolloutRunner:
                                 "client_latency_ms": client_latency_ms,
                                 "returned_action_count": int(response.actions.shape[0]),
                                 "queued_action_count": int(queued_count),
+                                "action_source": "expert" if expert_control else "policy",
                                 "server_timing": dict(response.timing),
                             }
                         )
                 action = queue.pop()
-                policy_actions_consumed += 1
+                if expert_control:
+                    # Policy predictions preserve the observation history but
+                    # only the frozen expert action reaches the simulator.
+                    action = prefix.pop()
+                else:
+                    policy_actions_consumed += 1
                 prompt_changed = False
                 for _ in range(self.suite.rollout.action_repeat):
-                    if env_steps >= self.suite.rollout.max_steps:
+                    if policy_steps >= self.suite.rollout.max_steps:
                         break
                     shared_runtime = runtime.metadata.get("shared_runtime")
                     task_terminal = False
@@ -169,6 +190,10 @@ class RolloutRunner:
                         observation, reward, done, info = _normalize_env_step(step_result)
                     runtime.observation = observation
                     env_steps += 1
+                    if expert_control:
+                        prefix.after_step()
+                    else:
+                        policy_steps += 1
                     reward_sum += reward
                     actions.append(action.copy())
                     if session is not None:
@@ -184,6 +209,15 @@ class RolloutRunner:
                                 frames = adapter.build_observation(runtime).images
                             session.append_frames(frames)
                     step_success = adapter.check_success(runtime, info)
+                    if expert_control:
+                        if step_success or task_terminal or task_stop_execution or task_failure_code:
+                            raise ValueError(
+                                "invalid expert prefix: target completed or task failed "
+                                f"before handoff ({task_failure_code})"
+                            )
+                        if done and not self.suite.rollout.ignore_done:
+                            raise ValueError("invalid expert prefix: environment ended")
+                        continue
                     # A task-owned final decision stops execution regardless of
                     # stop_on_success / ignore_done. Do not run later subtask
                     # handoffs, repeated actions, or the rest of the action chunk.

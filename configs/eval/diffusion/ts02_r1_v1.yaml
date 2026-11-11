@@ -1,0 +1,11 @@
+suite_version: ts02_diffusion_r1_v1
+task:
+  id: TS02
+  env_split: pretrain
+  options:
+    task_config_file: bench/tasks/ts02/resources/task.yaml
+    observation_profile_file: configs/benchmark/observation_profiles/rgbd_v3.yaml
+seeds: {start: 1050, stop: 1100}
+rollout: {replan_steps: 1, action_repeat: 1, stop_on_success: true, ignore_done: true}
+artifacts: {record_video: true, video_cameras: [agentview_left, agentview_right, eye_in_hand], video_fps: 20}
+transport: {timeout_s: 30.0, connect_attempts: 10, connect_retry_delay_s: 2.0, inference_retries: 0}

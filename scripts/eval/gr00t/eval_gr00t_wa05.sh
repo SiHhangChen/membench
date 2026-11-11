@@ -19,7 +19,14 @@ CKPT_STEP="${CKPT_STEP:-100000}"
 CKPT_DIR="${CKPT_DIR:-${CKPT_ROOT}/${CKPT_STEP}/pretrained_model}"
 BASE_MODEL_DIR="${BASE_MODEL_DIR:-/data/shared_workspace/chensihang/pretrained/GR00T-N1.7-3B}"
 VLM_MODEL_DIR="${VLM_MODEL_DIR:-/data/shared_workspace/chensihang/pretrained/Cosmos-Reason2-2B}"
-SUITE="${SUITE:-configs/eval/legacy_suites/wa05_gr00t_r40_v1.yaml}"
+# Stage diagnostics retain the legacy policy-controlled first stage.
+case "${1:-}" in
+    *stage*|prefixes|prefix-summary)
+        SUITE="${SUITE:-configs/eval/legacy_suites/wa05_gr00t_r40_v1.yaml}"
+        RUN_ID="${RUN_ID:-wa05-gr00t-${CKPT_STEP}-50seeds-r40}"
+        ;;
+esac
+SUITE="${SUITE:-configs/eval/legacy_suites/wa05_gr00t_r40_prefix_v2.yaml}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-outputs/eval}"
 SERVER_HOST="${SERVER_HOST:-127.0.0.1}"
 SERVER_INFERENCE_TIMEOUT_S="${SERVER_INFERENCE_TIMEOUT_S:-300}"
@@ -28,7 +35,7 @@ GPU="${GPU:-3}"
 RENDER_GPU="${RENDER_GPU:-${GPU}}"
 RETRY_ERRORS="${RETRY_ERRORS:-0}"
 
-RUN_ID="${RUN_ID:-wa05-gr00t-${CKPT_STEP}-50seeds-r40}"
+RUN_ID="${RUN_ID:-wa05-gr00t-${CKPT_STEP}-50seeds-r40-prefix-v2}"
 STAGE_SUITE="${STAGE_SUITE:-configs/eval/stages/wa05_gr00t_r40_v1.yaml}"
 PREFIX_ROOT="${PREFIX_ROOT:-}"
 STAGE_OUTPUT_ROOT="${STAGE_OUTPUT_ROOT:-outputs/stage_eval}"

@@ -133,6 +133,8 @@ class TaskRuntimeAPI:
         [RuntimeDescriptor, Any, Mapping[str, Any]], Mapping[str, Any]
     ] | None = None
     build_subtask_scheduler: Callable[[Any, str], Any] | None = None
+    build_evaluation_prefix: Callable[[RuntimeDescriptor, str], Any] | None = None
+    validate_evaluation_prefix: Callable[[InitializedTaskRuntime, str], Mapping[str, Any]] | None = None
 
 
 @dataclass(frozen=True, slots=True)
