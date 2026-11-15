@@ -1,0 +1,22 @@
+<mujoco model="box">
+  <asset />
+  <worldbody>
+    <body>
+      <body name="object">
+        <geom name="floor_collision" type="box" pos="0 0 0.008" size="0.17 0.2 0.008" group="0" contype="1" conaffinity="1" rgba="0 0 0 0" friction="1.2 0.01 0.001" density="500" />
+        <geom name="floor_visual" type="box" pos="0 0 0.008" size="0.17 0.2 0.008" group="1" contype="0" conaffinity="0" rgba="0.55 0.65 0.72 1" friction="1.2 0.01 0.001" density="500" />
+        <geom name="roof_collision" type="box" pos="0 0 0.292" size="0.17 0.2 0.008" group="0" contype="1" conaffinity="1" rgba="0 0 0 0" friction="1.2 0.01 0.001" density="500" />
+        <geom name="roof_visual" type="box" pos="0 0 0.292" size="0.17 0.2 0.008" group="1" contype="0" conaffinity="0" rgba="0.55 0.65 0.72 1" friction="1.2 0.01 0.001" density="500" />
+        <geom name="front_collision" type="box" pos="0 0.192 0.15" size="0.17 0.008 0.134" group="0" contype="1" conaffinity="1" rgba="0 0 0 0" friction="1.2 0.01 0.001" density="500" />
+        <geom name="front_visual" type="box" pos="0 0.192 0.15" size="0.17 0.008 0.134" group="1" contype="0" conaffinity="0" rgba="0.55 0.65 0.72 1" friction="1.2 0.01 0.001" density="500" />
+        <geom name="back_collision" type="box" pos="0 -0.192 0.15" size="0.17 0.008 0.134" group="0" contype="1" conaffinity="1" rgba="0 0 0 0" friction="1.2 0.01 0.001" density="500" />
+        <geom name="back_visual" type="box" pos="0 -0.192 0.15" size="0.17 0.008 0.134" group="1" contype="0" conaffinity="0" rgba="0.55 0.65 0.72 1" friction="1.2 0.01 0.001" density="500" />
+        <geom name="side_collision" type="box" pos="0.162 0 0.15" size="0.008 0.2 0.134" group="0" contype="1" conaffinity="1" rgba="0 0 0 0" friction="1.2 0.01 0.001" density="500" />
+        <geom name="side_visual" type="box" pos="0.162 0 0.15" size="0.008 0.2 0.134" group="1" contype="0" conaffinity="0" rgba="0.55 0.65 0.72 1" friction="1.2 0.01 0.001" density="500" />
+        <geom name="reg_bbox" type="box" pos="0 0 0" size="0.17 0.2 0.3" group="1" contype="0" conaffinity="0" rgba="0 0 0 0" />
+        <geom name="opening_front_lip_collision" type="box" pos="-0.162 0.14 0.15" size="0.008 0.06 0.134" group="0" contype="1" conaffinity="1" rgba="0 0 0 0" friction="1.2 0.01 0.001" />
+        <geom name="opening_front_lip_visual" type="box" pos="-0.162 0.14 0.15" size="0.008 0.06 0.134" group="1" contype="0" conaffinity="0" rgba="0.55 0.65 0.72 1" friction="1.2 0.01 0.001" />
+      </body>
+    </body>
+  </worldbody>
+</mujoco>

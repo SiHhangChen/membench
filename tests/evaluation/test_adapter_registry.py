@@ -89,7 +89,7 @@ def test_all_builtin_tasks_resolve_to_an_evaluation_adapter() -> None:
     [
         "TM01", "TM02", "TM04", "TS01", "TS02", "TS03", "TS04",
         "WA-01", "WA-02", "WA-03", "WA-04", "WA-05", "WR-01", "WR-02", "WR-03", "WR-04",
-        "WR-05", "WR-06", "WR-07", "WR-08", "WR-11", "WX-01", "WX-02",
+        "WR-05", "WR-06", "WR-07", "WR-08", "WR-11", "WR-12", "WX-01", "WX-02",
     ],
 )
 def test_all_calibrated_preflights_consume_the_versioned_observation_profile(

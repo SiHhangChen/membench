@@ -1,0 +1,68 @@
+{
+  "completed_task_episodes": 50,
+  "completion_rate": 1.0,
+  "counts": {
+    "cancelled": 0,
+    "error": 0,
+    "failure": 43,
+    "success": 7
+  },
+  "duplicate_seeds": [],
+  "episodes_total": 50,
+  "failure_reasons": {
+    "max_steps": 33,
+    "wrong_box_placement": 10
+  },
+  "inference_latency_ms_mean": 20.26390910412943,
+  "invalid_episode_artifacts": {},
+  "overall_success_rate": 0.14,
+  "pending": 0,
+  "planned": 50,
+  "publishable": true,
+  "recorded": 50,
+  "report_stages": {
+    "complete": true,
+    "eligible_episodes": 50,
+    "missing_episodes": 0,
+    "order": [
+      "block_picked",
+      "block_placed",
+      "success"
+    ],
+    "profile_id": "WR-12/report-v2",
+    "reported_episodes": 50,
+    "schema_version": "membench.report_stage_summary/v1",
+    "stages": {
+      "block_picked": {
+        "denominator": 50,
+        "first_pass_step_mean": 445.3225806451613,
+        "not_applicable": 0,
+        "passed": 31,
+        "rate": 0.62
+      },
+      "block_placed": {
+        "denominator": 50,
+        "first_pass_step_mean": 622.8823529411765,
+        "not_applicable": 0,
+        "passed": 17,
+        "rate": 0.34
+      },
+      "success": {
+        "denominator": 50,
+        "first_pass_step_mean": 537.0,
+        "not_applicable": 0,
+        "passed": 7,
+        "rate": 0.14
+      }
+    },
+    "task_id": "WR-12"
+  },
+  "success_rate": 0.14,
+  "success_rate_ci95": [
+    0.06950833427016294,
+    0.2618619371058554
+  ],
+  "success_step_mean": 537.0,
+  "task_success_rate": 0.14,
+  "unexpected": 0
+}

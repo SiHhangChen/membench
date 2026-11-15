@@ -1,0 +1,20 @@
+<mujoco model="tray">
+  <asset />
+  <worldbody>
+    <body>
+      <body name="object">
+        <geom name="floor_collision" type="box" pos="0 0 0.006" size="0.15 0.135 0.006" group="0" contype="1" conaffinity="1" rgba="0 0 0 0" friction="1.2 0.01 0.001" density="500" />
+        <geom name="floor_visual" type="box" pos="0 0 0.006" size="0.15 0.135 0.006" group="1" contype="0" conaffinity="0" rgba="0.75 0.77 0.8 1" friction="1.2 0.01 0.001" density="500" />
+        <geom name="front_collision" type="box" pos="0 0.129 0.02" size="0.15 0.006 0.008" group="0" contype="1" conaffinity="1" rgba="0 0 0 0" friction="1.2 0.01 0.001" density="500" />
+        <geom name="front_visual" type="box" pos="0 0.129 0.02" size="0.15 0.006 0.008" group="1" contype="0" conaffinity="0" rgba="0.75 0.77 0.8 1" friction="1.2 0.01 0.001" density="500" />
+        <geom name="back_collision" type="box" pos="0 -0.129 0.02" size="0.15 0.006 0.008" group="0" contype="1" conaffinity="1" rgba="0 0 0 0" friction="1.2 0.01 0.001" density="500" />
+        <geom name="back_visual" type="box" pos="0 -0.129 0.02" size="0.15 0.006 0.008" group="1" contype="0" conaffinity="0" rgba="0.75 0.77 0.8 1" friction="1.2 0.01 0.001" density="500" />
+        <geom name="left_collision" type="box" pos="-0.144 0 0.02" size="0.006 0.123 0.008" group="0" contype="1" conaffinity="1" rgba="0 0 0 0" friction="1.2 0.01 0.001" density="500" />
+        <geom name="left_visual" type="box" pos="-0.144 0 0.02" size="0.006 0.123 0.008" group="1" contype="0" conaffinity="0" rgba="0.75 0.77 0.8 1" friction="1.2 0.01 0.001" density="500" />
+        <geom name="right_collision" type="box" pos="0.144 0 0.02" size="0.006 0.123 0.008" group="0" contype="1" conaffinity="1" rgba="0 0 0 0" friction="1.2 0.01 0.001" density="500" />
+        <geom name="right_visual" type="box" pos="0.144 0 0.02" size="0.006 0.123 0.008" group="1" contype="0" conaffinity="0" rgba="0.75 0.77 0.8 1" friction="1.2 0.01 0.001" density="500" />
+        <geom name="reg_bbox" type="box" pos="0 0 0" size="0.15 0.135 0.028" group="1" contype="0" conaffinity="0" rgba="0 0 0 0" />
+      </body>
+    </body>
+  </worldbody>
+</mujoco>

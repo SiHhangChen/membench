@@ -1,0 +1,8 @@
+{
+  "schema_version": "membench.task_sampling/v1",
+  "entries": {
+    "profile_id": "WR-12/sampling-v2",
+    "block_radius_m": 0.045,
+    "placement_radius_m": 0.045
+  }
+}

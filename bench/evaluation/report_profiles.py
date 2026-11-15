@@ -222,6 +222,21 @@ WR11_REPORT_PROFILE = _profile(
     "item_delivered",
     "success",
 )
+WR12_REPORT_PROFILE_V1 = _profile(
+    "WR-12",
+    "can_observed",
+    "memory_barrier",
+    "block_picked",
+    "block_placed",
+    "success",
+)
+WR12_REPORT_PROFILE = _profile(
+    "WR-12",
+    "block_picked",
+    "block_placed",
+    "success",
+    version=2,
+)
 WX01_REPORT_PROFILE = _profile(
     "WX-01",
     "wipe_completed",
@@ -262,6 +277,7 @@ REPORT_STAGE_PROFILES = (
     WR07_REPORT_PROFILE,
     WR08_REPORT_PROFILE,
     WR11_REPORT_PROFILE,
+    WR12_REPORT_PROFILE,
     WX01_REPORT_PROFILE,
     WX02_REPORT_PROFILE,
 )
@@ -269,7 +285,9 @@ REPORT_STAGE_PROFILES = (
 _PROFILES_BY_TASK = {profile.task_id: profile for profile in REPORT_STAGE_PROFILES}
 # Historical reports remain readable only under their explicit profile id.
 # Keep them out of the default, one-profile-per-task catalog.
-_HISTORICAL_REPORT_STAGE_PROFILES = (TM01_REPORT_PROFILE_V1, TM02_REPORT_PROFILE_V1)
+_HISTORICAL_REPORT_STAGE_PROFILES = (
+    TM01_REPORT_PROFILE_V1, TM02_REPORT_PROFILE_V1, WR12_REPORT_PROFILE_V1,
+)
 _PROFILES_BY_ID = {
     profile.profile_id: profile
     for profile in (*REPORT_STAGE_PROFILES, *_HISTORICAL_REPORT_STAGE_PROFILES)
@@ -324,6 +342,8 @@ __all__ = [
     "WR07_REPORT_PROFILE",
     "WR08_REPORT_PROFILE",
     "WR11_REPORT_PROFILE",
+    "WR12_REPORT_PROFILE",
+    "WR12_REPORT_PROFILE_V1",
     "WX01_REPORT_PROFILE",
     "WX02_REPORT_PROFILE",
     "get_report_stage_profile",

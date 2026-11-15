@@ -8,6 +8,10 @@
 #   bash scripts/record/convert_tasks_to_lerobot_v061.sh TS01 [200]
 #   bash scripts/record/convert_tasks_to_lerobot_v061.sh TS03 [200]
 #   bash scripts/record/convert_tasks_to_lerobot_v061.sh WA-02 [200]
+#   bash scripts/record/convert_tasks_to_lerobot_v061.sh WR-12 200 \
+#     outputs/datasets/wr12_200success_v14_complete data/final/wr12-final wr12-final
+#   Optional arguments: INPUT_SHARD OUTPUT_ROOT REPO_ID.
+#   PYTHON and MEMBENCH_LEROBOT_SRC may override the active interpreter/source.
 #
 # 前置:
 #   - conda 环境 lerobot061 (Python 3.12 + lerobot 0.6.1)
@@ -26,10 +30,11 @@ TASK_UPPER="${1:?用法: bash $0 TASK_ID [EXPECTED_EPISODES], 如 TS01 或 WA-02
 EXPECTED_EPISODES="${2:-200}"
 TASK_LOWER=$(echo "${TASK_UPPER//-/}" | tr 'A-Z' 'a-z')
 
-SHARD="outputs/datasets/${TASK_UPPER//-/}"
+SHARD="${3:-outputs/datasets/${TASK_UPPER//-/}}"
 TASK_DIR="$SHARD/train/${TASK_UPPER}"
-OUTPUT_ROOT="lerobot_data/${TASK_LOWER}_${EXPECTED_EPISODES}seeds_v061"
-REPO_ID="local/${TASK_LOWER}_${EXPECTED_EPISODES}seeds_v061"
+OUTPUT_ROOT="${4:-lerobot_data/${TASK_LOWER}_${EXPECTED_EPISODES}seeds_v061}"
+REPO_ID="${5:-local/${TASK_LOWER}_${EXPECTED_EPISODES}seeds_v061}"
+PYTHON="${PYTHON:-python}"
 
 if [[ ! -d "$TASK_DIR" ]]; then
   echo "错误: 任务目录不存在: $TASK_DIR"
@@ -42,7 +47,7 @@ fi
 episode_dirs=()
 while IFS= read -r -d '' d; do
   episode_dirs+=("$d")
-done < <(find "$TASK_DIR" -mindepth 1 -maxdepth 1 -type d -name 'seed_*_attempt_*' -print0 | sort -z)
+done < <(find -L "$TASK_DIR" -mindepth 1 -maxdepth 1 -type d -name 'seed_*_attempt_*' -print0 | sort -z)
 
 # ==================== 数量校验 ====================
 if (( ${#episode_dirs[@]} != EXPECTED_EPISODES )); then
@@ -73,8 +78,16 @@ if (( DEPTH )); then
   depth_arg=(--depth)
 fi
 
-MEMBENCH_LEROBOT_SRC="$PWD/policy/lerobot-0.6.1/src" \
-python scripts/record/convert_bench_episodes_to_lerobot_v061.py \
+if [[ -z "${MEMBENCH_LEROBOT_SRC:-}" ]]; then
+  if [[ -d "$PWD/policy/lerobot-0.6.1/src/lerobot" ]]; then
+    MEMBENCH_LEROBOT_SRC="$PWD/policy/lerobot-0.6.1/src"
+  else
+    MEMBENCH_LEROBOT_SRC="$("$PYTHON" -c 'import pathlib, lerobot; print(pathlib.Path(lerobot.__file__).resolve().parent.parent)')"
+  fi
+fi
+export MEMBENCH_LEROBOT_SRC
+
+"$PYTHON" scripts/record/convert_bench_episodes_to_lerobot_v061.py \
   "${episode_args[@]}" \
   --output-root "$OUTPUT_ROOT" \
   --repo-id "$REPO_ID" \

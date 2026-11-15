@@ -59,6 +59,7 @@ _ENTRIES: tuple[CatalogEntry, ...] = (
     CatalogEntry("WR-07", "wr07", "WR07MatchMilkCartonToColoredSugarPlate", "3.0.0", 3600),
     CatalogEntry("WR-08", "wr08", "WR08MatchMilkCartonsToColoredSugarPlates", "2.0.0", 2000),
     CatalogEntry("WR-11", "wr11", "WR11FetchMatchingMilkCarton", "3.2.0", 3600),
+    CatalogEntry("WR-12", "wr12", "WR12PlaceAtRememberedBox", "1.4.0", 2400),
     CatalogEntry("WX-01", "wx01", "WX01ReturnObjectToOriginalPlace", "1.0.0", 3200),
     CatalogEntry("WX-02", "wx02", "WX02CleanUnderCupAndReturnIt", "1.0.0", 5200),
 )

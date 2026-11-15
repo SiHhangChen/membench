@@ -1,0 +1,35 @@
+{
+  "schema_version": "membench.task_scene/v1",
+  "entries": {
+    "fixture": "island_island_group_1",
+    "box_xy": {
+      "left": [
+        3.0,
+        -2.6
+      ],
+      "right": [
+        3.65,
+        -2.45
+      ]
+    },
+    "tray_xy": {
+      "left": [
+        3.0,
+        -2.1
+      ],
+      "right": [
+        3.65,
+        -2.1
+      ]
+    },
+    "block_xy": [
+      3.32,
+      -2.02
+    ],
+    "can_offset_xy_by_box": {
+      "left": [-0.05, -0.09],
+      "right": [0.06, -0.09]
+    },
+    "can_scale": 3.0
+  }
+}

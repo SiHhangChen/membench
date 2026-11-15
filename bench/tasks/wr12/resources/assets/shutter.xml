@@ -1,0 +1,11 @@
+<mujoco model="shutter">
+  <asset />
+  <worldbody>
+    <body>
+      <body name="object" mocap="true">
+        <geom name="panel_collision" type="box" pos="-0.178 0 0.15" size="0.012 0.20 0.15" group="0" contype="1" conaffinity="1" rgba="0 0 0 0" friction="1.2 0.01 0.001" />
+        <geom name="panel_visual" type="box" pos="-0.178 0 0.15" size="0.012 0.20 0.15" group="1" contype="0" conaffinity="0" rgba="0.55 0.65 0.72 1" />
+      </body>
+    </body>
+  </worldbody>
+</mujoco>

@@ -160,6 +160,11 @@ BUILTIN_TASK_PLUGINS: tuple[TaskPlugin, ...] = (
         env_name="WR11FetchMatchingMilkCarton",
     ),
     _builtin_task_plugin(
+        "WR-12",
+        aliases=("WR12", "WR_12"),
+        env_name="WR12PlaceAtRememberedBox",
+    ),
+    _builtin_task_plugin(
         "WX-01",
         aliases=("WX01", "WX_01"),
         env_name="WX01ReturnObjectToOriginalPlace",

@@ -1,0 +1,7 @@
+schema_version: 1
+assets:
+  block: block.xml
+  box: box.xml
+  tray: tray.xml
+  shutter: shutter.xml
+  can: objaverse/canned_food/canned_food_15/model.xml
