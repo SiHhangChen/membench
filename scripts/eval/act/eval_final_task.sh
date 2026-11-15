@@ -17,6 +17,7 @@ fi
 port="${PORT:-57102}"
 run_suffix=""
 if [[ "$task" == wa01 || "$task" == wa05 ]]; then run_suffix="-prefix-v2"; fi
+if [[ "$task" == wr11 ]]; then run_suffix="-stages-v2"; fi
 run_id="${RUN_ID:-act-${task}-${step}${run_suffix}}"
 
 case "$command" in

@@ -43,7 +43,11 @@ class WR11Evaluator:
         self.reset()
 
     def reset(self, snapshot=None):
-        self.stage_steps = {stage: None for stage in STAGE_ORDER}
+        # Observation and departure remain task requirements in diagnostics,
+        # while the public report counts physical pickup, delivery, and success.
+        self.stage_steps = {
+            stage: None for stage in (*STAGE_ORDER, "sample_observed", "stock_reached")
+        }
         self.first_picked_item = None
         self.first_pick_step = None
         self.failure_code = None
@@ -91,29 +95,30 @@ class WR11Evaluator:
                 self.failure_code = "ambiguous_first_pick"
                 return self
             self.first_picked_item = next(iter(picked))
-            # The first physical selection is permanent, even if later released.
-            if self.first_picked_item != self.matching_item:
-                self.failure_code = "wrong_first_pick"
-            elif self.stage_steps["stock_reached"] is None or not snapshot.at_stock:
+            # Count physical pickup independently of packaging color. The first
+            # selected carton stays fixed, even if it is subsequently released.
+            self.stage_steps["item_picked"] = step
+            if self.stage_steps["stock_reached"] is None or not snapshot.at_stock:
                 self.failure_code = "pick_before_memory_barrier"
             elif snapshot.sample_in_any_camera:
                 self.failure_code = "sample_visible_at_selection"
-            else:
-                self.stage_steps["first_pick_correct"] = step
         elif picked - {self.first_picked_item}:
             self.failure_code = "extra_carton_picked"
         if self.failure_code:
             return self
         delivered = (
-            self.stage_steps["first_pick_correct"] is not None
+            self.stage_steps["item_picked"] is not None
             and step > self.first_pick_step
-            and self.matching_item in snapshot.delivered_items
+            and self.first_picked_item in snapshot.delivered_items
         )
         self._delivery_run = self._delivery_run + 1 if delivered else 0
         if self._delivery_run >= self.placement_dwell_steps:
             self.stage_steps["item_delivered"] = step
-            self.stage_steps["success"] = step
-            self.success = True
+            if self.first_picked_item == self.matching_item:
+                self.stage_steps["success"] = step
+                self.success = True
+            else:
+                self.failure_code = "wrong_color_delivered"
         return self
 
     def to_diagnostics(self):
@@ -142,8 +147,12 @@ class WR11Evaluator:
             "profile_id": REPORT_STAGE_PROFILE_ID,
             "order": list(STAGE_ORDER),
             "stages": {
-                stage: {"applicable": True, "passed": step is not None, "first_pass_step": step}
-                for stage, step in self.stage_steps.items()
+                stage: {
+                    "applicable": True,
+                    "passed": self.stage_steps[stage] is not None,
+                    "first_pass_step": self.stage_steps[stage],
+                }
+                for stage in STAGE_ORDER
             },
         }
 

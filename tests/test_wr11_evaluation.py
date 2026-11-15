@@ -1,6 +1,7 @@
 import pytest
 
 from bench.evaluation.report_stages import validate_report_stages
+from bench.evaluation.report_profiles import get_report_stage_profile
 from bench.tasks.wr11.evaluation import WR11EvaluationSnapshot as Snapshot
 from bench.tasks.wr11.evaluation import WR11Evaluator
 
@@ -25,23 +26,81 @@ def test_success_requires_observation_departure_first_selection_and_supported_de
     evaluator.observe(Snapshot(8, delivered_items=("stock_center",)))
     assert evaluator.success and evaluator.to_diagnostics()["stop_execution"]
     report = evaluator.to_report_stages()
-    validate_report_stages(report, expected_task_id="WR-11", expected_profile_id="WR-11/report-v1")
+    validate_report_stages(report, expected_task_id="WR-11", expected_profile_id="WR-11/report-v2")
+    assert report["order"] == ["item_picked", "item_delivered", "success"]
     assert all(stage["passed"] for stage in report["stages"].values())
     evaluator.observe(Snapshot(9, sample_undisturbed=False))
     assert evaluator.success  # terminal verdict is frozen
 
 
-def test_wrong_first_pick_cannot_be_repaired_by_switching_cartons():
+def test_wrong_color_pick_continues_and_delivery_counts_before_color_failure():
     evaluator = ready()
     evaluator.observe(
         Snapshot(5, at_stock=True, sample_in_any_camera=False, picked_items=("stock_left",))
     )
-    evaluator.observe(
-        Snapshot(6, picked_items=("stock_center",), delivered_items=("stock_center",))
-    )
-    assert evaluator.failure_code == "wrong_first_pick"
+    assert evaluator.stage_steps["item_picked"] == 5
+    assert not evaluator.terminal
+    for step in (6, 7):
+        evaluator.observe(Snapshot(step, delivered_items=("stock_left",)))
+        assert not evaluator.terminal
+    evaluator.observe(Snapshot(8, delivered_items=("stock_left",)))
+    assert evaluator.failure_code == "wrong_color_delivered"
     assert evaluator.first_picked_item == "stock_left"
     assert not evaluator.success
+    report = validate_report_stages(evaluator.to_report_stages(), expected_success=False)
+    assert report["stages"]["item_picked"]["passed"]
+    assert report["stages"]["item_delivered"]["passed"]
+    assert not report["stages"]["success"]["passed"]
+
+
+def test_wrong_first_pick_cannot_be_repaired_by_switching_cartons():
+    evaluator = ready().observe(
+        Snapshot(5, at_stock=True, sample_in_any_camera=False, picked_items=("stock_left",))
+    )
+    evaluator.observe(Snapshot(6, picked_items=("stock_center",)))
+    assert evaluator.failure_code == "extra_carton_picked"
+    assert evaluator.first_picked_item == "stock_left"
+    assert not evaluator.success
+
+
+def test_delivery_must_be_of_the_first_picked_carton():
+    evaluator = ready().observe(
+        Snapshot(5, at_stock=True, sample_in_any_camera=False, picked_items=("stock_left",))
+    )
+    for step in range(6, 10):
+        evaluator.observe(Snapshot(step, delivered_items=("stock_center",)))
+    assert evaluator.stage_steps["item_delivered"] is None
+    assert not evaluator.terminal
+
+
+def test_sample_disturbance_after_wrong_color_pick_still_stops_episode():
+    evaluator = ready().observe(
+        Snapshot(5, at_stock=True, sample_in_any_camera=False, picked_items=("stock_left",))
+    )
+    evaluator.observe(Snapshot(6, sample_undisturbed=False))
+    assert evaluator.failure_code == "sample_disturbed"
+    assert evaluator.stage_steps["item_picked"] == 5
+    assert not evaluator.success
+
+
+def test_historical_five_stage_report_remains_readable():
+    order = [
+        "sample_observed", "stock_reached", "first_pick_correct", "item_delivered", "success"
+    ]
+    report = {
+        "schema_version": "membench.report_stages/v1",
+        "task_id": "WR-11",
+        "profile_id": "WR-11/report-v1",
+        "order": order,
+        "stages": {
+            stage: {"applicable": True, "passed": True, "first_pass_step": step}
+            for stage, step in zip(order, (3, 4, 5, 8, 8), strict=True)
+        },
+    }
+    assert validate_report_stages(report, expected_success=True)["order"] == order
+    current = get_report_stage_profile("WR-11")
+    assert current.profile_id == "WR-11/report-v2"
+    assert current.stage_ids == ("item_picked", "item_delivered", "success")
 
 
 def test_duplicate_and_skipped_steps_cannot_satisfy_observation_or_delivery_dwell():

@@ -56,7 +56,7 @@ def test_catalog_aliases_and_expert_share_descriptor_actions():
     pick = next(stage for stage in plan.stages if getattr(stage, "operation", None) == "pick")
     assert pick.target == episode.facts["matching_item"]
     assert pick.metadata == {"test_override": 1}
-    assert api.report_stage_profile_id == "WR-11/report-v1"
+    assert api.report_stage_profile_id == "WR-11/report-v2"
 
 
 @pytest.mark.parametrize(

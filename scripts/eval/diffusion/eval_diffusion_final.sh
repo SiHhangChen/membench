@@ -23,6 +23,7 @@ fi
 port="${PORT:-57103}"
 protocol="v1"
 if [[ "$task" == wa01 || "$task" == wa05 ]]; then protocol="prefix-v2"; fi
+if [[ "$task" == wr11 ]]; then protocol="stages-v2"; fi
 run_id="${RUN_ID:-diffusion-${task}-${step}-r1-seedrng-${protocol}}"
 smoke_run_id="diffusion-${task}-${step}-r1-seedrng-smoke-1049-${protocol}"
 

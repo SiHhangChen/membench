@@ -55,7 +55,7 @@ def test_all_plugins_expose_canonical_runtime_and_expert_apis(task_id: str) -> N
         ("wr06_v1.yaml", 3200),
         ("wr07_v1.yaml", 1000),
         ("wr08_v1.yaml", 2000),
-        ("wr11_v3.yaml", 3600),
+        ("wr11_v3.yaml", 1800),
         ("wx01_v1.yaml", 3200),
         ("wx02_v1.yaml", 5200),
     ],
